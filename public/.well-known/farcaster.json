@@ -1,0 +1,16 @@
+{
+  "accountAssociation": {
+    "header": "PLACEHOLDER",
+    "payload": "PLACEHOLDER",
+    "signature": "PLACEHOLDER"
+  },
+  "frame": {
+    "version": "1",
+    "name": "TYSM Daily Faucet",
+    "iconUrl": "https://tysm-faucet.vercel.app/icon.png",
+    "homeUrl": "https://tysm-faucet.vercel.app",
+    "imageUrl": "https://tysm-faucet.vercel.app/og.png",
+    "buttonTitle": "🙏 Claim $TYSM",
+    "splashBackgroundColor": "#0d0d1a"
+  }
+}
