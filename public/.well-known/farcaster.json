@@ -4,13 +4,13 @@
     "payload": "PLACEHOLDER",
     "signature": "PLACEHOLDER"
   },
-  "frame": {
+  "miniapp": {
     "version": "1",
     "name": "TYSM Daily Faucet",
     "iconUrl": "https://tysm-faucet.vercel.app/Tysm-Logo.png",
-    "splashImageUrl": "https://tysm-faucet.vercel.app/Tysm-Logo.png",
+    "homeUrl": "https://tysm-faucet.vercel.app/",
     "imageUrl": "https://tysm-faucet.vercel.app/og.png",
-    "buttonTitle": "🙏 Claim $TYSM",
+    "buttonTitle": "Claim TYSM",
+    "splashImageUrl": "https://tysm-faucet.vercel.app/Tysm-Logo.png",
     "splashBackgroundColor": "#0d0d1a"
   }
-}
