@@ -13,8 +13,8 @@
     "react": "^18",
     "react-dom": "^18",
     "@farcaster/frame-sdk": "^0.0.31",
+    "@farcaster/miniapp-sdk": "^0.1.0",
     "@farcaster/frame-wagmi-connector": "^0.0.18",
-    "@farcaster/miniapp-sdk": "latest",
     "wagmi": "^2.12.7",
     "viem": "^2.21.12",
     "@tanstack/react-query": "^5.51.21"
