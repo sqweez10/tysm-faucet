@@ -2,12 +2,13 @@
 
 // START OF NEW UI
 // ============================================================
-//  TYSM Daily Faucet — Overhaul v2
+//  TYSM Daily Faucet — Overhaul v2 (Optimized Event-Driven)
 //  - Infinite Cycle Loyalty Logic (Cycle 1/2/3+)
 //  - Heart Protection System (0–3/3)
 //  - UTC-only countdown & streak checks
 //  - Leaderboard tab with Milestone Rules + Lucky Draw
 //  - NO changes to contract / wagmi / providers
+//  - HIGH PERFORMANCE: No polling loops, purely event-driven
 // ============================================================
 
 import { useEffect, useState, useCallback } from "react";
@@ -93,8 +94,6 @@ function getCycleInfo(totalDays: number): CycleInfo {
       ],
     };
   } else {
-    // Cycle 3+ uses same 2x pattern as cycle 2, anchored at day 61
-    const base3 = Math.floor((totalDays - 61) / 30) * 30 + 61;
     return {
       cycle: 3, cycleDay: totalDays - 60, baseRate: 10000,
       cycleLabel: "Cycle 3+",
@@ -123,7 +122,6 @@ function getNextMilestone(totalDays: number): MilestoneEntry | null {
   return milestones.find(m => m.day > totalDays) ?? null;
 }
 
-// Cycle progress bar: position within the 30-day window
 function getCycleProgress(totalDays: number): { pos: number; pct: number } {
   const { cycleDay } = getCycleInfo(totalDays);
   const pos = Math.min(cycleDay, 30);
@@ -132,10 +130,10 @@ function getCycleProgress(totalDays: number): { pos: number; pct: number } {
 
 // ─── Heart / Protection Colors ───────────────────────────────
 function heartColor(hearts: number): string {
-  if (hearts === 0) return "#22c55e";   // green  — 0/3
-  if (hearts === 1) return "#eab308";   // yellow — 1/3
-  if (hearts === 2) return "#f97316";   // orange — 2/3
-  return "#ef4444";                     // red    — 3/3
+  if (hearts === 0) return "#22c55e";
+  if (hearts === 1) return "#eab308";
+  if (hearts === 2) return "#f97316";
+  return "#ef4444";
 }
 function heartBg(hearts: number): string {
   if (hearts === 0) return "rgba(34,197,94,0.12)";
@@ -151,20 +149,15 @@ function getMonthEndSecondsUTC(): number {
   return Math.max(0, Math.floor((end.getTime() - now.getTime()) / 1000));
 }
 
-// ─── Mock Leaderboard Data ───────────────────────────────────
-// In production this would come from your backend API
-const MOCK_LEADERBOARD = [
-  { rank: 1,  handle: "@tops87",     totalDays: 91, dailyRate: 10000, hearts: 0 },
-  { rank: 2,  handle: "@cryptolily", totalDays: 67, dailyRate: 10000, hearts: 1 },
-  { rank: 3,  handle: "@basewhale",  totalDays: 60, dailyRate: 5000,  hearts: 0 },
-  { rank: 4,  handle: "@nftpanda",   totalDays: 45, dailyRate: 5000,  hearts: 2 },
-  { rank: 5,  handle: "@gmgm_eth",   totalDays: 37, dailyRate: 5000,  hearts: 1 },
-  { rank: 6,  handle: "@wagmifren",  totalDays: 30, dailyRate: 2000,  hearts: 0 },
-  { rank: 7,  handle: "@pixel_ape",  totalDays: 22, dailyRate: 2000,  hearts: 3 },
-  { rank: 8,  handle: "@degenking",  totalDays: 15, dailyRate: 2000,  hearts: 2 },
-  { rank: 9,  handle: "@solarsail",  totalDays: 7,  dailyRate: 2000,  hearts: 0 },
-  { rank: 10, handle: "@newfrend",   totalDays: 3,  dailyRate: 2000,  hearts: 1 },
-];
+// ─── Leaderboard Interfaces ──────────────────────────────────
+interface LeaderboardEntry {
+  rank: number;
+  address: string;
+  handle: string;
+  totalDays: number;
+  streak: number;
+  hearts: number;
+}
 
 // ─── Heart Display Component ─────────────────────────────────
 function HeartBadge({ hearts }: { hearts: number }) {
@@ -201,14 +194,18 @@ export default function Home() {
   const [hasShared, setHasShared]         = useState(false);
   const [activeTab, setActiveTab]         = useState<"home" | "board">("home");
   const [monthSecs, setMonthSecs]         = useState(getMonthEndSecondsUTC());
-  // Hearts stored locally (in production: synced from backend)
-  const [hearts, setHearts]               = useState(0); // 0–3
+  const [hearts, setHearts]               = useState(0);
+
+  // Live Leaderboard States
+  const [liveLeaderboard, setLiveLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const [lbLoading,       setLbLoading]       = useState(false);
+  const [lbUpdatedAt,     setLbUpdatedAt]     = useState(0);
+  const [lbError,         setLbError]         = useState(false);
 
   const { address, isConnected } = useAccount();
   const { connect } = useConnect();
-
   const baseQ = { query: { enabled: contractReady && !!address } };
-
+  
   const { data: canClaimData,  refetch: refetchCanClaim  } = useReadContract({
     address: FAUCET_ADDRESS, abi: FAUCET_ABI, functionName: "canClaim",
     args: [address!], ...baseQ,
@@ -229,7 +226,7 @@ export default function Home() {
     address: FAUCET_ADDRESS, abi: FAUCET_ABI, functionName: "totalClaimsCount",
     query: { enabled: contractReady },
   });
-
+  
   const { writeContract, data: txHash, isPending: isWritePending, error: writeError } = useWriteContract();
   const { isLoading: isTxLoading, isSuccess: isTxSuccess } = useWaitForTransactionReceipt({ hash: txHash });
 
@@ -287,6 +284,37 @@ export default function Home() {
     return () => clearTimeout(id);
   }, [writeError]);
 
+  // ── HIGH PERFORMANCE EVENT-DRIVEN LEADERBOARD FETCH ──────────
+  // Triggers ONLY when switching to the 'board' tab. No infinite polling.
+  useEffect(() => {
+    if (activeTab !== "board") return;
+
+    let cancelled = false;
+
+    const fetchLb = async () => {
+      try {
+        setLbError(false);
+        setLbLoading(true);
+        const res  = await fetch("/api/leaderboard", { cache: "no-store" });
+        const json = await res.json();
+        if (!cancelled && Array.isArray(json.leaderboard)) {
+          setLiveLeaderboard(json.leaderboard);
+          setLbUpdatedAt(json.updatedAt ?? Date.now());
+        }
+      } catch {
+        if (!cancelled) setLbError(true);
+      } finally {
+        if (!cancelled) setLbLoading(false);
+      }
+    };
+
+    fetchLb();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab]);
+
   // ── Derived state ──────────────────────────────────────────
   const totalDays    = userInfoData ? Number(userInfoData[3]) : 0;
   const totalClaimed = userInfoData ? userInfoData[2] : BigInt(0);
@@ -295,7 +323,6 @@ export default function Home() {
   const canClaim     = canClaimData ?? false;
   const isBusy       = isWritePending || isTxLoading;
 
-  // Next day's data (what user will earn on NEXT claim)
   const nextTotalDay  = totalDays + 1;
   const cycleInfo     = getCycleInfo(nextTotalDay);
   const rewardAmt     = getDailyReward(nextTotalDay);
@@ -303,13 +330,11 @@ export default function Home() {
   const nextM         = getNextMilestone(totalDays);
   const { pos: cyclePos, pct: cyclePct } = getCycleProgress(totalDays);
 
-  // Month countdown parts
   const mDays = Math.floor(monthSecs / 86400);
   const mHrs  = Math.floor((monthSecs % 86400) / 3600);
   const mMins = Math.floor((monthSecs % 3600) / 60);
   const mSecs = monthSecs % 60;
 
-  // Share handlers (unchanged logic, updated labels)
   const handleShareFirst = useCallback(async () => {
     const name   = userCtx?.user?.displayName || userCtx?.user?.username || "Someone";
     const reward = fmt(rewardAmt);
@@ -346,7 +371,6 @@ export default function Home() {
     writeContract({ address: FAUCET_ADDRESS, abi: FAUCET_ABI, functionName: "claim", chainId: base.id });
   }, [writeContract]);
 
-  // ── Loading screen ─────────────────────────────────────────
   if (!sdkReady) {
     return (
       <div className="min-h-screen bg-[#0d0d1a] flex flex-col items-center justify-center gap-4">
@@ -356,7 +380,6 @@ export default function Home() {
     );
   }
 
-  // ── Cycle milestone markers for progress bar ───────────────
   const { milestones: currentMilestones } = getCycleInfo(Math.max(totalDays, 1));
   const milestoneMarkers = [
     { pct: (7  / 30) * 100, color: "#f59e0b", label: "D7"  },
@@ -364,7 +387,6 @@ export default function Home() {
     { pct: (30 / 30) * 100, color: "#8b5cf6", label: "D30" },
   ];
 
-  // ─────────────────────────────────────────────────────────────
   return (
     <main className="min-h-screen bg-gradient-to-b from-[#0a0a18] via-[#0f1425] to-[#0a0a18] text-white">
       <style>{`
@@ -400,7 +422,6 @@ export default function Home() {
       ══════════════════════════════════════ */}
       {activeTab === "home" && (
         <div className="max-w-sm mx-auto px-4 pt-5 pb-8 space-y-3">
-
           {/* Header */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
@@ -475,8 +496,7 @@ export default function Home() {
               <div className="h-3 rounded-full transition-all duration-700"
                 style={{ width: `${cyclePct}%`, background: "linear-gradient(90deg,#f59e0b,#fcd34d)" }} />
               {milestoneMarkers.map((m) => (
-                <div key={m.pct}
-                  className="absolute top-0 h-full w-0.5"
+                <div key={m.pct} className="absolute top-0 h-full w-0.5"
                   style={{ left: `${m.pct}%`, background: m.color + "60" }} />
               ))}
             </div>
@@ -504,10 +524,8 @@ export default function Home() {
           {/* ── Main Claim Card ── */}
           <div className="bg-white/4 border border-yellow-900/20 rounded-2xl p-4 text-center"
             style={{ boxShadow: isOnMile ? "0 0 32px rgba(245,158,11,0.28)" : "0 0 20px rgba(245,158,11,0.08)" }}>
-
             {!contractReady ? (
               <p className="text-gray-600 text-sm py-4">Deploy contract first...</p>
-
             ) : canClaim ? (
               <>
                 {isOnMile ? (
@@ -525,89 +543,40 @@ export default function Home() {
                   {fmt(rewardAmt)}
                 </p>
                 <p className="text-gray-500 text-sm mb-3">$TYSM tokens</p>
-
                 {txError && (
                   <p className="text-red-400 text-xs mb-2 bg-red-950/30 rounded-lg p-1.5">{txError}</p>
                 )}
                 {isTxSuccess && justClaimed && (
                   <p className="text-green-400 text-xs mb-2 font-semibold">✅ Claimed! Check your wallet.</p>
                 )}
-
-                {/* Share → Claim flow */}
                 {!hasShared ? (
                   <div className="space-y-2">
-                    <button onClick={handleShareFirst}
-                      className="w-full font-black py-3.5 rounded-xl text-base transition-all active:scale-95 flex items-center justify-center gap-2 text-white"
-                      style={{ background: "linear-gradient(135deg,#7c3aed,#6d28d9)" }}>
+                    <button onClick={handleShareFirst} className="w-full font-black py-3.5 rounded-xl text-base transition-all active:scale-95 flex items-center justify-center gap-2 text-white" style={{ background: "linear-gradient(135deg,#7c3aed,#6d28d9)" }}>
                       ⚡ Share First → Unlock Claim!
                     </button>
                     <p className="text-gray-600 text-[10px]">Share to unlock the Claim button 🙏</p>
                   </div>
                 ) : (
-                  <button onClick={handleClaim} disabled={isBusy || !isConnected}
-                    className="w-full font-black py-4 rounded-xl text-lg transition-all active:scale-95"
-                    style={{
-                      background: isBusy || !isConnected ? "#374151" : "linear-gradient(90deg,#f59e0b,#fcd34d,#f59e0b)",
-                      color: isBusy || !isConnected ? "#6b7280" : "#000",
-                    }}>
-                    {isBusy ? "⏳ Sending..." : !isConnected ? "🔌 Connecting..." : "🙏 Claim $TYSM"}
+                  <button onClick={handleClaim} disabled={isBusy || !isConnected} className="w-full font-black py-4 rounded-xl text-lg transition-all active:scale-95 text-white" style={{ background: isBusy || !isConnected ? "#374151" : "linear-gradient(90deg,#f59e0b,#fcd34d)" }}>
+                    {isBusy ? "Processing..." : "🙏 Claim Free $TYSM"}
                   </button>
                 )}
               </>
-
             ) : (
-              /* ── Countdown State ── */
-              <>
-                <p className="text-gray-500 text-[11px] uppercase tracking-widest mb-1">Next Claim In</p>
-                <p className="font-black text-yellow-400 font-mono"
-                  style={{ fontSize: 40, letterSpacing: "0.06em" }}>
-                  {countdown > 0 ? formatCountdown(countdown) : "00:00:00"}
-                </p>
-                <p className="text-gray-600 text-xs mt-1">
-                  {countdown > 0 ? `~${Math.ceil(countdown / 3600)}h remaining` : "Refreshing..."}
-                </p>
-                {nextM && (
-                  <p className="text-yellow-700 text-[10px] mt-1.5">
-                    🎯 {nextM.day - totalDays} more days → 🎁 {fmt(nextM.reward)} $TYSM!
-                  </p>
-                )}
-                {/* Heart protection reminder */}
-                <div className="mt-3 flex items-center justify-center gap-1.5">
-                  <HeartBadge hearts={hearts} />
-                  <p className="text-gray-600 text-[10px]">streak shield</p>
+              <div className="py-2">
+                <div className="inline-flex items-center gap-1.5 bg-gray-950 border border-gray-800 rounded-full px-3 py-1 mb-3">
+                  <span className="w-1.5 h-1.5 rounded-full bg-gray-600" />
+                  <p className="text-gray-500 text-[11px] font-bold uppercase tracking-wider">Claimed · Next in</p>
                 </div>
-              </>
+                <p className="font-mono text-3xl font-black text-gray-400 tracking-wider mb-2">
+                  {formatCountdown(countdown)}
+                </p>
+                <button onClick={handleShareAfter} className="w-full font-bold py-2.5 rounded-xl text-xs bg-white/5 border border-white/10 hover:bg-white/10 transition-all flex items-center justify-center gap-1.5 text-gray-300">
+                  📢 Broadcast Your Streak
+                </button>
+              </div>
             )}
           </div>
-
-          {/* Community stats */}
-          <div className="bg-white/4 border border-purple-900/20 rounded-2xl p-3">
-            <div className="flex justify-between items-center">
-              <div>
-                <p className="text-gray-500 text-[9px] uppercase tracking-widest">Community Claims</p>
-                <p className="text-purple-400 font-black text-xl">{totalClaims.toLocaleString()}</p>
-              </div>
-              <div className="text-right">
-                <p className="text-gray-500 text-[9px] uppercase tracking-widest">Daily Reward</p>
-                <p className="text-yellow-400 font-black text-xl">
-                  {cycleInfo.cycle === 1 ? "2,000" : cycleInfo.cycle === 2 ? "5,000" : "10,000"}+
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Share after claim */}
-          {justClaimed && (
-            <button onClick={handleShareAfter}
-              className="w-full text-white font-black py-4 rounded-2xl text-base transition-all active:scale-95 flex items-center justify-center gap-2"
-              style={{ background: "linear-gradient(135deg,#7c3aed,#6d28d9)", boxShadow: "0 0 24px rgba(139,92,246,0.2)" }}>
-              🎉 Share Your Claim! Cast it! ⚡
-            </button>
-          )}
-
-          <p className="text-center text-gray-700 text-[10px] pt-1">
-            $TYSM Faucet · tops87 · Base Chain · UTC
-          </p>
         </div>
       )}
 
@@ -615,174 +584,43 @@ export default function Home() {
           LEADERBOARD TAB
       ══════════════════════════════════════ */}
       {activeTab === "board" && (
-        <div className="max-w-sm mx-auto px-4 pt-5 pb-24 space-y-4">
-
-          {/* ── SECTION 1: Rules & Milestone Loop ── */}
-          <div className="bg-white/4 border border-yellow-900/25 rounded-2xl p-4 space-y-3">
-            <p className="text-yellow-400 font-black text-sm tracking-wide">📜 Rules & Milestone Loops</p>
-
-            {/* Cycle cards */}
-            {[
-              {
-                label: "Cycle 1", days: "Days 1–30", rate: "2,000", badge: "#f59e0b",
-                milestones: [
-                  { d: 7,  r: "10,000" },
-                  { d: 15, r: "40,000" },
-                  { d: 30, r: "90,000" },
-                ],
-              },
-              {
-                label: "Cycle 2", days: "Days 31–60", rate: "5,000", badge: "#10b981",
-                milestones: [
-                  { d: 37, r: "20,000" },
-                  { d: 45, r: "80,000" },
-                  { d: 60, r: "180,000" },
-                ],
-              },
-              {
-                label: "Cycle 3+", days: "Days 61+", rate: "10,000", badge: "#8b5cf6",
-                milestones: [
-                  { d: 67, r: "20,000" },
-                  { d: 75, r: "80,000" },
-                  { d: 90, r: "180,000" },
-                ],
-              },
-            ].map((c) => (
-              <div key={c.label} className="rounded-xl p-3 space-y-1.5"
-                style={{ background: `${c.badge}0d`, border: `1px solid ${c.badge}30` }}>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-black px-2 py-0.5 rounded-full"
-                      style={{ color: c.badge, background: `${c.badge}20`, border: `1px solid ${c.badge}40` }}>
-                      {c.label}
-                    </span>
-                    <p className="text-gray-400 text-[11px]">{c.days}</p>
-                  </div>
-                  <p className="text-[11px] font-bold" style={{ color: c.badge }}>
-                    {c.rate} $TYSM/day
-                  </p>
-                </div>
-                <div className="flex gap-2">
-                  {c.milestones.map((m) => (
-                    <div key={m.d} className="flex-1 text-center rounded-lg py-1"
-                      style={{ background: `${c.badge}10` }}>
-                      <p className="text-[9px] text-gray-500">Day {m.d}</p>
-                      <p className="text-[10px] font-black" style={{ color: c.badge }}>🎁 {m.r}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-
-            {/* Heart rules */}
-            <div className="bg-white/5 rounded-xl p-3 space-y-1.5">
-              <p className="text-gray-300 text-[11px] font-bold">❤️ Streak Protection</p>
-              <div className="space-y-1">
-                {[
-                  { icon: "🟢", text: "0/3 — Full shields, streak safe" },
-                  { icon: "🟡", text: "1/3 — 1 miss absorbed" },
-                  { icon: "🟠", text: "2/3 — 2 misses absorbed" },
-                  { icon: "🔴", text: "3/3 — One more miss = streak reset!" },
-                  { icon: "🔄", text: "7 straight claims → shields refill to 0/3" },
-                ].map((r) => (
-                  <p key={r.text} className="text-[10px] text-gray-500 flex gap-1.5 items-start">
-                    <span>{r.icon}</span>{r.text}
-                  </p>
-                ))}
-              </div>
-            </div>
-
-            {/* UTC note */}
-            <p className="text-gray-600 text-[9px] text-center">
-              🌐 All timers & resets use UTC · Your 24h window starts from the exact moment you claim
-            </p>
+        <div className="max-w-sm mx-auto px-4 pt-4 pb-24 space-y-4">
+          {/* Header Note */}
+          <div className="text-center py-2">
+            <h2 className="text-2xl font-black shimmer-text">Global Leaderboard</h2>
+            <p className="text-gray-500 text-[11px]">The most loyal $TYSM claimers in the ecosystem</p>
           </div>
 
-          {/* ── SECTION 2: Lucky Draw ── */}
-          <div className="lucky-bg border border-purple-800/40 rounded-2xl p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <p className="text-purple-300 font-black text-sm">🎰 Monthly Lucky Draw</p>
-              <span className="text-[9px] font-bold text-purple-400 bg-purple-900/30 border border-purple-700/30 rounded-full px-2 py-0.5 uppercase tracking-wider">
-                End of Month
-              </span>
-            </div>
-
-            {/* Countdown to month end */}
-            <div className="bg-black/30 border border-purple-700/30 rounded-xl p-3 text-center">
-              <p className="text-gray-500 text-[9px] uppercase tracking-widest mb-1">Draw Countdown (UTC)</p>
-              <div className="flex justify-center gap-2">
-                {[
-                  { v: String(mDays).padStart(2, "0"), label: "Days" },
-                  { v: String(mHrs).padStart(2, "0"),  label: "Hrs"  },
-                  { v: String(mMins).padStart(2, "0"), label: "Min"  },
-                  { v: String(mSecs).padStart(2, "0"), label: "Sec"  },
-                ].map((t) => (
-                  <div key={t.label} className="text-center">
-                    <div className="bg-purple-900/40 border border-purple-700/30 rounded-lg w-10 h-9 flex items-center justify-center">
-                      <span className="text-purple-200 font-black text-lg font-mono leading-none">{t.v}</span>
-                    </div>
-                    <p className="text-gray-600 text-[8px] mt-0.5">{t.label}</p>
-                  </div>
-                ))}
+          {/* ── SECTION 4: Live Leaderboard Table ── */}
+          <div className="bg-white/4 border border-white/8 rounded-2xl overflow-hidden">
+            {/* Header with Last Updated Status */}
+            <div className="px-3 py-2 border-b border-white/5 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <p className="text-gray-300 text-xs font-bold">🏆 Community Ranks</p>
+                <span className="flex items-center gap-1 bg-green-900/30 border border-green-700/30 rounded-full px-2 py-0.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+                  <span className="text-green-400 text-[9px] font-bold">LIVE</span>
+                </span>
               </div>
-            </div>
-
-            {/* Prize tiers */}
-            <div className="space-y-2">
-              {[
-                { rank: "🥇", prize: "1st Prize", usd: "$3.50", desc: "worth of $TYSM", cls: "prize-gold" },
-                { rank: "🥈", prize: "2nd Prize", usd: "$2.50", desc: "worth of $TYSM", cls: "prize-silver" },
-                { rank: "🥉", prize: "3rd Prize", usd: "$1.00", desc: "worth of $TYSM", cls: "prize-bronze" },
-              ].map((p) => (
-                <div key={p.prize} className={`${p.cls} rounded-xl p-3 flex items-center justify-between`}>
-                  <div className="flex items-center gap-2.5">
-                    <span className="text-xl">{p.rank}</span>
-                    <div>
-                      <p className="text-gray-300 text-[11px] font-bold">{p.prize}</p>
-                      <p className="text-gray-500 text-[9px]">{p.desc}</p>
-                    </div>
-                  </div>
-                  <p className="text-white font-black text-base">{p.usd}</p>
-                </div>
-              ))}
-            </div>
-
-            {/* Eligibility note */}
-            <div className="bg-purple-900/20 border border-purple-700/20 rounded-xl p-2.5">
-              <p className="text-gray-400 text-[10px] text-center">
-                🎟️ All active claimers this month are automatically entered · Winner drawn by admin at month end (UTC)
+              <p className="text-gray-600 text-[9px]">
+                {lbLoading
+                  ? "Updating..."
+                  : lbUpdatedAt > 0
+                  ? `Updated`
+                  : ""}
               </p>
             </div>
-          </div>
 
-          {/* ── SECTION 3: Live Status Grid ── */}
-          <div className="bg-white/4 border border-white/8 rounded-2xl p-3.5 space-y-2">
-            <p className="text-gray-300 text-xs font-bold">📊 Your Live Status</p>
-            <div className="grid grid-cols-3 gap-2">
-              {[
-                { label: "Total Days", value: `${totalDays}d 🔥`, color: "text-yellow-400" },
-                { label: "Daily Rate",  value: `${fmt(cycleInfo.baseRate)}`, color: "text-green-400" },
-                { label: "Current Cycle", value: cycleInfo.cycleLabel, color: "text-purple-400" },
-              ].map((s) => (
-                <div key={s.label} className="bg-white/5 rounded-xl p-2 text-center">
-                  <p className={`${s.color} font-black text-sm leading-tight`}>{s.value}</p>
-                  <p className="text-gray-600 text-[9px] mt-0.5">{s.label}</p>
-                </div>
-              ))}
-            </div>
-            <div className="flex items-center justify-between bg-white/5 rounded-xl px-3 py-2">
-              <p className="text-gray-400 text-[11px]">Streak Protection</p>
-              <HeartBadge hearts={hearts} />
-            </div>
-          </div>
+            {/* Error state */}
+            {lbError && (
+              <div className="px-3 py-2 bg-red-950/20 border-b border-red-800/20">
+                <p className="text-red-400 text-[10px] text-center">
+                  Failed to load leaderboard data.
+                </p>
+              </div>
+            )}
 
-          {/* ── SECTION 4: Leaderboard Table ── */}
-          <div className="bg-white/4 border border-white/8 rounded-2xl overflow-hidden">
-            <div className="px-3 py-2 border-b border-white/5">
-              <p className="text-gray-300 text-xs font-bold">🏆 Community Ranks</p>
-            </div>
-
-            {/* Header */}
+            {/* Column headers */}
             <div className="grid grid-cols-12 gap-1 px-3 py-1.5 border-b border-white/5">
               <p className="col-span-1 text-gray-600 text-[9px] font-bold uppercase">#</p>
               <p className="col-span-4 text-gray-600 text-[9px] font-bold uppercase">User</p>
@@ -791,41 +629,89 @@ export default function Home() {
               <p className="col-span-3 text-gray-600 text-[9px] font-bold uppercase text-center">Shield</p>
             </div>
 
-            {/* Rows */}
-            <div className="divide-y divide-white/5">
-              {MOCK_LEADERBOARD.map((row) => {
-                const ci = getCycleInfo(row.totalDays);
-                const rankColor = row.rank === 1 ? "#f59e0b" : row.rank === 2 ? "#9ca3af" : row.rank === 3 ? "#d97706" : "#4b5563";
-                return (
-                  <div key={row.rank} className="grid grid-cols-12 gap-1 px-3 py-2.5 items-center">
-                    <p className="col-span-1 font-black text-sm" style={{ color: rankColor }}>
-                      {row.rank <= 3 ? ["🥇","🥈","🥉"][row.rank-1] : row.rank}
-                    </p>
-                    <div className="col-span-4 flex items-center gap-1">
-                      <p className="text-gray-300 text-[11px] font-medium truncate">{row.handle}</p>
-                      <CycleBadge cycle={ci.cycle} />
-                    </div>
-                    <p className="col-span-2 text-yellow-400 font-black text-[11px] text-center">{row.totalDays}🔥</p>
-                    <p className="col-span-2 text-green-400 text-[10px] font-bold text-center">{(row.dailyRate/1000).toFixed(0)}K</p>
-                    <div className="col-span-3 flex justify-center">
-                      <span className="text-[9px] font-bold rounded-full px-1.5 py-0.5"
-                        style={{
-                          color: heartColor(row.hearts),
-                          background: heartBg(row.hearts),
-                          border: `1px solid ${heartColor(row.hearts)}40`
-                        }}>
-                        {row.hearts}/3
-                      </span>
-                    </div>
+            {/* Loading skeleton */}
+            {lbLoading && liveLeaderboard.length === 0 && (
+              <div className="divide-y divide-white/5">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} className="grid grid-cols-12 gap-1 px-3 py-2.5 items-center animate-pulse">
+                    <div className="col-span-1 h-3 bg-white/10 rounded" />
+                    <div className="col-span-4 h-3 bg-white/10 rounded" />
+                    <div className="col-span-2 h-3 bg-white/10 rounded mx-auto w-8" />
+                    <div className="col-span-2 h-3 bg-white/10 rounded mx-auto w-6" />
+                    <div className="col-span-3 h-3 bg-white/10 rounded mx-auto w-8" />
                   </div>
-                );
-              })}
+                ))}
+              </div>
+            )}
+
+            {/* No data */}
+            {!lbLoading && liveLeaderboard.length === 0 && !lbError && (
+              <div className="px-3 py-8 text-center">
+                <p className="text-gray-600 text-xs">No claimers found yet</p>
+                <p className="text-gray-700 text-[10px] mt-1">Be the first to claim!</p>
+              </div>
+            )}
+
+            {/* Live rows */}
+            {liveLeaderboard.length > 0 && (
+              <div className="divide-y divide-white/5">
+                {liveLeaderboard.map((row) => {
+                  const ci        = getCycleInfo(row.totalDays);
+                  const rankColor =
+                    row.rank === 1 ? "#f59e0b"
+                    : row.rank === 2 ? "#9ca3af"
+                    : row.rank === 3 ? "#d97706"
+                    : "#4b5563";
+
+                  return (
+                    <div
+                      key={row.address}
+                      className="grid grid-cols-12 gap-1 px-3 py-2.5 items-center transition-colors hover:bg-white/3"
+                    >
+                      <p className="col-span-1 font-black text-sm" style={{ color: rankColor }}>
+                        {row.rank <= 3 ? ["🥇", "🥈", "🥉"][row.rank - 1] : row.rank}
+                      </p>
+
+                      <div className="col-span-4 flex items-center gap-1 min-w-0">
+                        <p className="text-gray-300 text-[11px] font-medium truncate">
+                          {row.handle}
+                        </p>
+                        <CycleBadge cycle={ci.cycle} />
+                      </div>
+
+                      <p className="col-span-2 text-yellow-400 font-black text-[11px] text-center">
+                        {row.totalDays}🔥
+                      </p>
+
+                      <p className="col-span-2 text-green-400 text-[10px] font-bold text-center">
+                        {(ci.baseRate / 1000).toFixed(0)}K
+                      </p>
+
+                      <div className="col-span-3 flex justify-center">
+                        <span
+                          className="text-[9px] font-bold rounded-full px-1.5 py-0.5"
+                          style={{
+                            color: heartColor(row.hearts),
+                            background: heartBg(row.hearts),
+                            border: `1px solid ${heartColor(row.hearts)}40`,
+                          }}
+                        >
+                          {row.hearts}/3
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Footer note */}
+            <div className="px-3 py-2 border-t border-white/5">
+              <p className="text-gray-700 text-[9px] text-center">
+                Refreshed on tab open · Sorted by Total Days claimed
+              </p>
             </div>
           </div>
-
-          <p className="text-center text-gray-700 text-[10px]">
-            $TYSM Faucet · tops87 · Base Chain · UTC
-          </p>
         </div>
       )}
 
@@ -845,7 +731,10 @@ export default function Home() {
               {(cycleInfo.baseRate/1000).toFixed(0)}K
             </p>
             <div className="col-span-3 flex justify-center">
-              <HeartBadge hearts={hearts} />
+              <span className="text-[9px] font-bold rounded-full px-1.5 py-0.5"
+                style={{ color: heartColor(hearts), background: heartBg(hearts), border: `1px solid ${heartColor(hearts)}40` }}>
+                {hearts}/3
+              </span>
             </div>
           </div>
         </div>
@@ -853,4 +742,3 @@ export default function Home() {
     </main>
   );
 }
-// END OF NEW UI
