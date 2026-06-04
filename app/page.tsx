@@ -114,7 +114,7 @@ export default function Home() {
         const ctx = await sdk.context;
         setUserCtx(ctx);
         connect({ connector: farcasterFrame() });
-        await sdk.actions.ready();
+        await miniappSdk.actions.ready();
       } catch (e) {
         console.warn("SDK:", e);
       } finally {
