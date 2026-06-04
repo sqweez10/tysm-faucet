@@ -161,7 +161,7 @@ export async function GET(request: NextRequest) {
               }} />
             </div>
             {/* Milestone markers label */}
-            <div style={{ display: "flex", justifyContent: "space-between", paddingLeft: "calc(7/30*600px - 12px)", paddingRight: "0px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", paddingLeft: "128px", paddingRight: "0px" }}>
               <span style={{ fontSize: "11px", color: cyclePos >= 7 ? "#f59e0b" : "#4b5563" }}>D7 REWARD</span>
               <span style={{ fontSize: "11px", color: cyclePos >= 15 ? "#10b981" : "#4b5563", marginLeft: "90px" }}>D15 REWARD</span>
               <span style={{ fontSize: "11px", color: cyclePos >= 30 ? "#8b5cf6" : "#4b5563" }}>D30 REWARD</span>
