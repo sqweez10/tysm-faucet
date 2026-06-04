@@ -10,7 +10,6 @@ export async function GET(request: NextRequest) {
   const streak  = parseInt(searchParams.get("streak")  || "0");
   const claimed = searchParams.get("claimed") || "0";
 
-  // Reward for current streak
   const reward =
     streak === 30 ? "90,000" :
     streak === 15 ? "40,000" :
@@ -18,13 +17,11 @@ export async function GET(request: NextRequest) {
 
   const isMile = streak === 7 || streak === 15 || streak === 30;
 
-  // Next milestone
   const next =
     streak < 7  ? { day: 7,  reward: "10,000", left: 7  - streak } :
     streak < 15 ? { day: 15, reward: "40,000", left: 15 - streak } :
     streak < 30 ? { day: 30, reward: "90,000", left: 30 - streak } : null;
 
-  // Progress % within 30-day cycle
   const cyclePos = streak === 0 ? 0 : streak % 30 === 0 ? 30 : streak % 30;
   const pct      = Math.round((cyclePos / 30) * 100);
 
@@ -71,18 +68,23 @@ export async function GET(request: NextRequest) {
         )}
 
         {/* Main content */}
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "14px", zIndex: 1, padding: "40px" }}>
+        <div style={{
+          display: "flex", flexDirection: "column",
+          alignItems: "center", gap: "14px",
+          zIndex: 1, padding: "40px",
+        }}>
 
-          {/* Logo + title */}
+          {/* Title */}
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px" }}>
-            <div style={{ fontSize: "60px", lineHeight: 1 }}>🙏</div>
             <div style={{
               fontSize: "72px", fontWeight: 900, lineHeight: 1,
               background: "linear-gradient(135deg,#fcd34d,#f59e0b,#d97706)",
               backgroundClip: "text", color: "transparent",
-            }}>$TYSM</div>
+            }}>
+              $TYSM
+            </div>
             <div style={{ fontSize: "16px", color: "#6b7280", letterSpacing: "4px", textTransform: "uppercase" }}>
-              Daily Faucet · by tops87
+              Daily Faucet  |  by tops87
             </div>
           </div>
 
@@ -108,13 +110,22 @@ export async function GET(request: NextRequest) {
               padding: "14px 28px",
               textAlign: "center",
               minWidth: "160px",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
             }}>
-              <div style={{ fontSize: "12px", color: "#9ca3af", letterSpacing: "2px", textTransform: "uppercase", marginBottom: "4px" }}>Streak</div>
-              <div style={{ fontSize: "44px", fontWeight: 900, color: "#f59e0b", lineHeight: 1 }}>{streak}d</div>
-              <div style={{ fontSize: "20px" }}>🔥</div>
+              <div style={{ fontSize: "12px", color: "#9ca3af", letterSpacing: "2px", textTransform: "uppercase", marginBottom: "4px" }}>
+                STREAK
+              </div>
+              <div style={{ fontSize: "44px", fontWeight: 900, color: "#f59e0b", lineHeight: 1 }}>
+                {streak}d
+              </div>
+              <div style={{ fontSize: "13px", color: "#f59e0b", fontWeight: 700, marginTop: "4px" }}>
+                FIRE
+              </div>
             </div>
 
-            {/* Today's reward */}
+            {/* Today reward */}
             <div style={{
               background: isMile ? "rgba(245,158,11,0.1)" : "rgba(255,255,255,0.04)",
               border: isMile ? "1px solid rgba(245,158,11,0.5)" : "1px solid rgba(245,158,11,0.25)",
@@ -122,14 +133,19 @@ export async function GET(request: NextRequest) {
               padding: "14px 28px",
               textAlign: "center",
               minWidth: "180px",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
             }}>
               <div style={{ fontSize: "12px", color: "#9ca3af", letterSpacing: "2px", textTransform: "uppercase", marginBottom: "4px" }}>
-                {isMile ? "Milestone!" : "Today"}
+                {isMile ? "MILESTONE!" : "TODAY"}
               </div>
               <div style={{ fontSize: "36px", fontWeight: 900, color: isMile ? "#fcd34d" : "#f59e0b", lineHeight: 1 }}>
-                {isMile ? "🎁" : ""}{reward}
+                {reward}
               </div>
-              <div style={{ fontSize: "14px", color: "#9ca3af" }}>$TYSM</div>
+              <div style={{ fontSize: "13px", color: "#9ca3af", marginTop: "4px" }}>
+                {isMile ? "GIFT DAY" : "$TYSM"}
+              </div>
             </div>
 
             {/* Total claimed */}
@@ -140,35 +156,57 @@ export async function GET(request: NextRequest) {
               padding: "14px 28px",
               textAlign: "center",
               minWidth: "180px",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
             }}>
-              <div style={{ fontSize: "12px", color: "#9ca3af", letterSpacing: "2px", textTransform: "uppercase", marginBottom: "4px" }}>Total Earned</div>
-              <div style={{ fontSize: "36px", fontWeight: 900, color: "#4ade80", lineHeight: 1 }}>{claimed}</div>
-              <div style={{ fontSize: "14px", color: "#9ca3af" }}>$TYSM</div>
+              <div style={{ fontSize: "12px", color: "#9ca3af", letterSpacing: "2px", textTransform: "uppercase", marginBottom: "4px" }}>
+                TOTAL EARNED
+              </div>
+              <div style={{ fontSize: "36px", fontWeight: 900, color: "#4ade80", lineHeight: 1 }}>
+                {claimed}
+              </div>
+              <div style={{ fontSize: "13px", color: "#9ca3af", marginTop: "4px" }}>
+                $TYSM
+              </div>
             </div>
           </div>
 
           {/* Progress bar */}
-          <div style={{ width: "600px", display: "flex", flexDirection: "column", gap: "6px" }}>
+          <div style={{ width: "620px", display: "flex", flexDirection: "column", gap: "6px" }}>
             <div style={{ display: "flex", justifyContent: "space-between" }}>
               <span style={{ fontSize: "12px", color: "#6b7280" }}>30-Day Cycle</span>
               <span style={{ fontSize: "12px", color: "#f59e0b", fontWeight: 700 }}>Day {cyclePos}/30</span>
             </div>
-            <div style={{ width: "600px", height: "10px", background: "rgba(255,255,255,0.08)", borderRadius: "100px", overflow: "hidden" }}>
+
+            {/* Bar */}
+            <div style={{
+              width: "620px", height: "12px",
+              background: "rgba(255,255,255,0.08)",
+              borderRadius: "100px", overflow: "hidden",
+            }}>
               <div style={{
-                width: `${pct}%`, height: "10px",
+                width: `${pct}%`, height: "12px",
                 background: "linear-gradient(90deg,#f59e0b,#fcd34d)",
                 borderRadius: "100px",
               }} />
             </div>
-            {/* Milestone markers label */}
-            <div style={{ display: "flex", justifyContent: "space-between", paddingLeft: "calc(7/30*600px - 12px)", paddingRight: "0px" }}>
-              <span style={{ fontSize: "11px", color: cyclePos >= 7 ? "#f59e0b" : "#4b5563" }}>🎁D7</span>
-              <span style={{ fontSize: "11px", color: cyclePos >= 15 ? "#10b981" : "#4b5563", marginLeft: "120px" }}>🎁D15</span>
-              <span style={{ fontSize: "11px", color: cyclePos >= 30 ? "#8b5cf6" : "#4b5563" }}>🎁D30</span>
+
+            {/* Milestone labels */}
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <span style={{ fontSize: "11px", fontWeight: 700, color: cyclePos >= 7  ? "#f59e0b" : "#4b5563" }}>
+                DAY 7 / 10K
+              </span>
+              <span style={{ fontSize: "11px", fontWeight: 700, color: cyclePos >= 15 ? "#10b981" : "#4b5563" }}>
+                DAY 15 / 40K
+              </span>
+              <span style={{ fontSize: "11px", fontWeight: 700, color: cyclePos >= 30 ? "#8b5cf6" : "#4b5563" }}>
+                DAY 30 / 90K
+              </span>
             </div>
           </div>
 
-          {/* Next milestone */}
+          {/* Next milestone banner */}
           {next && (
             <div style={{
               background: "rgba(245,158,11,0.08)",
@@ -176,17 +214,19 @@ export async function GET(request: NextRequest) {
               borderRadius: "100px",
               padding: "8px 28px",
               fontSize: "16px", color: "#fcd34d",
+              fontWeight: 700,
             }}>
-              🎯 {next.left} more days → 🎁 Day {next.day}: {next.reward} $TYSM!
+              {next.left} more days to Day {next.day} Milestone  |  {next.reward} $TYSM
             </div>
           )}
 
           {/* URL */}
-          <div style={{ fontSize: "16px", color: "#4b5563" }}>tysm-faucet.vercel.app</div>
+          <div style={{ fontSize: "15px", color: "#4b5563", letterSpacing: "1px" }}>
+            tysm-faucet.vercel.app
+          </div>
         </div>
       </div>
     ),
     { width: 1200, height: 630 }
   );
 }
-        
