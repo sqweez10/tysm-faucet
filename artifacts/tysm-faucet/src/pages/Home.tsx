@@ -7,7 +7,7 @@ import sdk from "@farcaster/frame-sdk";
 import { sdk as miniappSdk } from "@farcaster/miniapp-sdk";
 import {
   useAccount, useConnect, useReadContract,
-  useWriteContract, useWaitForTransactionReceipt,
+  useWriteContract, useWaitForTransactionReceipt, usePublicClient,
 } from "wagmi";
 // @ts-ignore
 import { farcasterFrame } from "@farcaster/frame-wagmi-connector";
@@ -186,6 +186,7 @@ export default function Home() {
 
   const { address, isConnected } = useAccount();
   const { connect } = useConnect();
+  const publicClient = usePublicClient();
   const baseQ = { query: { enabled: contractReady && !!address } };
 
   const { data: canClaimData,  refetch: refetchCanClaim  } = useReadContract({
@@ -266,15 +267,54 @@ export default function Home() {
     if (activeTab !== "board") return;
     let cancelled = false;
     const fetchLb = async () => {
+      if (!contractReady || !publicClient) return;
       try {
         setLbError(false);
         setLbLoading(true);
-        const res  = await fetch("/api/leaderboard", { cache: "no-store" });
-        const json = await res.json();
-        if (!cancelled && Array.isArray(json.leaderboard)) {
-          setLiveLeaderboard(json.leaderboard);
-          setLbUpdatedAt(json.updatedAt ?? Date.now());
+        const bsRes = await fetch(
+          `https://base.blockscout.com/api/v2/addresses/${FAUCET_ADDRESS}/transactions?filter=to`,
+          { headers: { Accept: "application/json" } }
+        );
+        const bsJson = await bsRes.json() as {
+          items?: Array<{ from: { hash: string }; status: string }>;
+        };
+        const addresses: `0x${string}`[] = [];
+        if (Array.isArray(bsJson.items)) {
+          const seen = new Set<string>();
+          for (const tx of bsJson.items) {
+            const from = tx.from?.hash?.toLowerCase();
+            if (from && tx.status === "ok" && !seen.has(from)) {
+              seen.add(from);
+              addresses.push(tx.from.hash as `0x${string}`);
+              if (addresses.length >= 25) break;
+            }
+          }
         }
+        if (addresses.length === 0) {
+          if (!cancelled) { setLiveLeaderboard([]); setLbUpdatedAt(Date.now()); }
+          return;
+        }
+        const calls = addresses.map((addr) => ({
+          address: FAUCET_ADDRESS,
+          abi: FAUCET_ABI,
+          functionName: "userInfo" as const,
+          args: [addr] as const,
+        }));
+        const results = await publicClient.multicall({ contracts: calls, allowFailure: true });
+        const board: LeaderboardEntry[] = results
+          .map((r, i) => {
+            if (r.status !== "success") return null;
+            const [, streak, , totalDays] = r.result as readonly [bigint, bigint, bigint, bigint];
+            const td = Number(totalDays);
+            if (td === 0) return null;
+            const addr = addresses[i];
+            return { address: addr, handle: `${addr.slice(0, 6)}...${addr.slice(-4)}`, totalDays: td, streak: Number(streak), hearts: 0 };
+          })
+          .filter((x): x is NonNullable<typeof x> => x !== null)
+          .sort((a, b) => b.totalDays - a.totalDays)
+          .slice(0, 10)
+          .map((e, i) => ({ ...e, rank: i + 1 }));
+        if (!cancelled) { setLiveLeaderboard(board); setLbUpdatedAt(Date.now()); }
       } catch {
         if (!cancelled) setLbError(true);
       } finally {
@@ -284,7 +324,7 @@ export default function Home() {
     fetchLb();
     const intervalId = setInterval(fetchLb, 15 * 60 * 1000);
     return () => { cancelled = true; clearInterval(intervalId); };
-  }, [activeTab]);
+  }, [activeTab, publicClient]);
 
   const totalDays    = userInfoData ? Number(userInfoData[3]) : 0;
   const totalClaimed = userInfoData ? userInfoData[2] : BigInt(0);

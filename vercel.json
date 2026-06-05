@@ -1,0 +1,12 @@
+{
+  "buildCommand": "pnpm --filter @workspace/tysm-faucet run build",
+  "outputDirectory": "artifacts/tysm-faucet/dist/public",
+  "installCommand": "pnpm install --no-frozen-lockfile",
+  "framework": null,
+  "env": {
+    "VITE_APP_URL": "https://tysm-faucet.vercel.app"
+  },
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}
