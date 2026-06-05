@@ -282,7 +282,8 @@ export default function Home() {
       }
     };
     fetchLb();
-    return () => { cancelled = true; };
+    const intervalId = setInterval(fetchLb, 15 * 60 * 1000);
+    return () => { cancelled = true; clearInterval(intervalId); };
   }, [activeTab]);
 
   const totalDays    = userInfoData ? Number(userInfoData[3]) : 0;
