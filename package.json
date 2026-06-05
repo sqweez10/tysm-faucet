@@ -1,33 +1,16 @@
 {
-  "name": "tysm-faucet",
-  "version": "0.1.0",
-  "private": true,
+  "name": "workspace",
+  "version": "0.0.0",
+  "license": "MIT",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint"
+    "preinstall": "sh -c 'rm -f package-lock.json yarn.lock; case \"$npm_config_user_agent\" in pnpm/*) ;; *) echo \"Use pnpm instead\" >&2; exit 1 ;; esac'",
+    "build": "pnpm run typecheck && pnpm -r --if-present run build",
+    "typecheck:libs": "tsc --build",
+    "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"
   },
-  "dependencies": {
-    "next": "14.2.15",
-    "react": "^18",
-    "react-dom": "^18",
-    "@farcaster/frame-sdk": "^0.0.31",
-    "@farcaster/miniapp-sdk": "^0.1.0",
-    "@farcaster/frame-wagmi-connector": "^0.0.18",
-    "wagmi": "^2.12.7",
-    "viem": "^2.21.12",
-    "@tanstack/react-query": "^5.51.21"
-  },
+  "private": true,
   "devDependencies": {
-    "typescript": "^5",
-    "@types/node": "^20",
-    "@types/react": "^18",
-    "@types/react-dom": "^18",
-    "tailwindcss": "^3.4.1",
-    "postcss": "^8",
-    "autoprefixer": "^10.0.1",
-    "eslint": "^8",
-    "eslint-config-next": "14.2.15"
+    "prettier": "^3.8.3",
+    "typescript": "~5.9.3"
   }
 }
