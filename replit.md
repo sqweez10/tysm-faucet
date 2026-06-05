@@ -1,36 +1,39 @@
-# [Project name]
+# TYSM Daily Faucet
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+A Farcaster miniapp that lets users claim free $TYSM tokens on Base Chain every 24 hours, with streak tracking, cycle-based rewards, and a live leaderboard.
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
+- `pnpm --filter @workspace/api-server run dev` — run the API server
+- `pnpm --filter @workspace/tysm-faucet run dev` — run the frontend (handled by workflow)
 - `pnpm run typecheck` — full typecheck across all packages
-- `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
 
 ## Stack
 
 - pnpm workspaces, Node.js 24, TypeScript 5.9
+- Frontend: React + Vite (Tailwind CSS v4)
 - API: Express 5
-- DB: PostgreSQL + Drizzle ORM
-- Validation: Zod (`zod/v4`), `drizzle-zod`
-- API codegen: Orval (from OpenAPI spec)
-- Build: esbuild (CJS bundle)
+- Blockchain: wagmi v2 + viem, Base Chain
+- Farcaster: @farcaster/frame-sdk, @farcaster/miniapp-sdk, @farcaster/frame-wagmi-connector
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `artifacts/tysm-faucet/src/pages/Home.tsx` — main faucet UI (claim + leaderboard tabs)
+- `artifacts/tysm-faucet/src/pages/SharePage.tsx` — share page shown when casting
+- `artifacts/api-server/src/routes/leaderboard.ts` — leaderboard API (fetches from Basescan + multicall)
+- `artifacts/tysm-faucet/public/` — og.png, Tysm-Logo.png
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- No database needed — all on-chain state read via wagmi/viem contract calls
+- Leaderboard fetches recent txs from Basescan API then multicalls userInfo for each address
+- Farcaster SDK initializes on mount; SDK not available in regular browsers (gracefully handles this)
+- `VITE_FAUCET_ADDRESS` env var controls the contract address (zero address = demo mode)
+- `VITE_APP_URL` env var sets the base URL for share links
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+Users open the miniapp inside Farcaster, connect their wallet via the Farcaster frame connector, and claim $TYSM tokens once per 24 hours. Streaks unlock higher cycle base rates (2K/5K/10K/day) and milestone bonuses on days 7, 15, 30. A live leaderboard shows top claimers sorted by total days.
 
 ## User preferences
 
@@ -38,7 +41,10 @@ _Populate as you build — explicit user instructions worth remembering across s
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- Set `VITE_FAUCET_ADDRESS` to the deployed contract address for the faucet to work
+- Basescan API rate-limited without an API key (the leaderboard uses `YourApiKeyToken` placeholder)
+- wagmi/viem are in `devDependencies` since this is a Vite-built static app
+- The `buffer` module externalization warning in the browser console is harmless (from viem internals)
 
 ## Pointers
 
