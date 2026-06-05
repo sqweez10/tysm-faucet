@@ -34,28 +34,23 @@ router.get("/leaderboard", async (_req, res) => {
     }
 
     const bsUrl =
-      `https://api.basescan.org/api` +
-      `?module=account&action=txlist` +
-      `&address=${FAUCET}` +
-      `&sort=desc&page=1&offset=200` +
-      `&apikey=YourApiKeyToken`;
+      `https://base.blockscout.com/api/v2/addresses/${FAUCET}/transactions` +
+      `?filter=to`;
 
-    const bsRes  = await fetch(bsUrl);
-    const bsJson = await bsRes.json();
+    const bsRes  = await fetch(bsUrl, {
+      headers: { "Accept": "application/json" },
+    });
+    const bsJson = await bsRes.json() as { items?: Array<{ from: { hash: string }; status: string }> };
 
     let addresses: `0x${string}`[] = [];
 
-    if (bsJson.status === "1" && Array.isArray(bsJson.result)) {
+    if (Array.isArray(bsJson.items)) {
       const seen = new Set<string>();
-      for (const tx of bsJson.result) {
-        const from = (tx.from as string).toLowerCase();
-        if (
-          tx.to?.toLowerCase() === FAUCET.toLowerCase() &&
-          tx.isError === "0" &&
-          !seen.has(from)
-        ) {
+      for (const tx of bsJson.items) {
+        const from = tx.from?.hash?.toLowerCase();
+        if (from && tx.status === "ok" && !seen.has(from)) {
           seen.add(from);
-          addresses.push(tx.from as `0x${string}`);
+          addresses.push(tx.from.hash as `0x${string}`);
           if (addresses.length >= 25) break;
         }
       }
