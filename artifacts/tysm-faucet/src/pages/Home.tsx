@@ -301,7 +301,7 @@ export default function Home() {
           args: [addr] as const,
         }));
         const results = await publicClient.multicall({ contracts: calls, allowFailure: true });
-        const board: LeaderboardEntry[] = results
+        const rawBoard = results
           .map((r, i) => {
             if (r.status !== "success") return null;
             const [, streak, , totalDays] = r.result as readonly [bigint, bigint, bigint, bigint];
@@ -314,6 +314,22 @@ export default function Home() {
           .sort((a, b) => b.totalDays - a.totalDays)
           .slice(0, 10)
           .map((e, i) => ({ ...e, rank: i + 1 }));
+
+        const resolveHandle = async (addr: string): Promise<string> => {
+          try {
+            const res = await fetch(`https://api.warpcast.com/v2/user-by-verification?address=${addr}`);
+            if (!res.ok) return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+            const json = await res.json();
+            const username = json?.result?.user?.username;
+            return username ? `@${username}` : `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+          } catch {
+            return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+          }
+        };
+
+        const handles = await Promise.all(rawBoard.map((e) => resolveHandle(e.address)));
+        const board: LeaderboardEntry[] = rawBoard.map((e, i) => ({ ...e, handle: handles[i] }));
+
         if (!cancelled) { setLiveLeaderboard(board); setLbUpdatedAt(Date.now()); }
       } catch {
         if (!cancelled) setLbError(true);
