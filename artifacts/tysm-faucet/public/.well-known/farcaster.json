@@ -1,4 +1,9 @@
 {
+  "accountAssociation": {
+    "header": "eyJmaWQiOjQ3NjAyNiwidHlwZSI6ImF1dGgiLCJrZXkiOiIweDkxMzJDZmYxZDRmMjU1NWQwRmQwOUJkZTg0ODZhQjVCQTNBRUQ5YUQifQ",
+    "payload": "eyJkb21haW4iOiJ0eXNtLWZhdWNldC52ZXJjZWwuYXBwIn0",
+    "signature": "kApfZiVrefJxP463UggSge83d9xMrWAIeYHKZzGmsG5TSu/g9W4I+UnoG0bAwA8ddLM/SB9cz9/uxqSnt0B2oxs="
+  },
   "frame": {
     "version": "next",
     "name": "TYSM Daily Faucet",
