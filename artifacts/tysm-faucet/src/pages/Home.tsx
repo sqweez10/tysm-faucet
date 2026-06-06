@@ -45,6 +45,13 @@ function formatCountdown(s: number): string {
   const sec = s % 60;
   return [h, m, sec].map((v) => String(v).padStart(2, "0")).join(":");
 }
+function nextClaimUTC(secondsLeft: number): string {
+  const t = new Date(Date.now() + secondsLeft * 1000);
+  const h = String(t.getUTCHours()).padStart(2, "0");
+  const m = String(t.getUTCMinutes()).padStart(2, "0");
+  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  return `${t.getUTCDate()} ${months[t.getUTCMonth()]} ${h}:${m} UTC`;
+}
 function formatAmount(amount: bigint): string {
   return Number(formatUnits(amount, 18)).toLocaleString("en-US", { maximumFractionDigits: 0 });
 }
@@ -175,7 +182,7 @@ export default function Home() {
   const [justClaimed, setJustClaimed]     = useState(false);
   const [txError, setTxError]             = useState("");
   const [hasShared, setHasShared]         = useState(false);
-  const [activeTab, setActiveTab]         = useState<"home" | "board">("home");
+  const [activeTab, setActiveTab]         = useState<"home" | "board" | "rewards">("home");
   const [monthSecs, setMonthSecs]         = useState(getMonthEndSecondsUTC());
   const [hearts, setHearts]               = useState(0);
 
@@ -433,10 +440,10 @@ export default function Home() {
       {/* Tab Navigation */}
       <div className="sticky top-0 z-50 bg-[#0a0a18]/95 backdrop-blur-sm border-b border-white/5">
         <div className="max-w-sm mx-auto flex">
-          {(["home", "board"] as const).map((tab) => (
+          {(["home", "board", "rewards"] as const).map((tab) => (
             <button key={tab} onClick={() => setActiveTab(tab)}
               className={`flex-1 py-3 text-xs font-black tracking-widest uppercase transition-all ${activeTab === tab ? "tab-active" : "tab-inactive"}`}>
-              {tab === "home" ? "🙏 Claim" : "🏆 Leaderboard"}
+              {tab === "home" ? "🙏 Claim" : tab === "board" ? "🏆 Board" : "🎁 Rewards"}
             </button>
           ))}
         </div>
@@ -591,8 +598,11 @@ export default function Home() {
                   <span className="w-1.5 h-1.5 rounded-full bg-gray-600" />
                   <p className="text-gray-500 text-[11px] font-bold uppercase tracking-wider">Claimed · Next in</p>
                 </div>
-                <p className="font-mono text-3xl font-black text-gray-400 tracking-wider mb-2">
+                <p className="font-mono text-3xl font-black text-gray-400 tracking-wider mb-1">
                   {formatCountdown(countdown)}
+                </p>
+                <p className="text-gray-600 text-[11px] font-mono mb-2">
+                  Available {nextClaimUTC(countdown)}
                 </p>
                 <button onClick={handleShareAfter} className="w-full font-bold py-2.5 rounded-xl text-xs bg-white/5 border border-white/10 hover:bg-white/10 transition-all flex items-center justify-center gap-1.5 text-gray-300">
                   📢 Broadcast Your Streak
@@ -701,6 +711,118 @@ export default function Home() {
               </p>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* REWARDS TAB */}
+      {activeTab === "rewards" && (
+        <div className="max-w-sm mx-auto px-4 pt-4 pb-8 space-y-4">
+
+          {/* Monthly Lucky Draw Banner */}
+          <div style={{
+            background: "linear-gradient(135deg,#92400e 0%,#78350f 50%,#451a03 100%)",
+            border: "1px solid rgba(245,158,11,0.55)",
+            boxShadow: "0 0 24px rgba(245,158,11,0.12)"
+          }} className="rounded-2xl p-4 space-y-3">
+            <p className="text-center text-base font-black text-yellow-300 leading-snug">
+              🎁 TYSM Daily Faucet<br/>Monthly Rewards! 🎁
+            </p>
+            <p className="text-center text-yellow-100/75 text-xs leading-relaxed">
+              To celebrate, I'm launching a special lucky draw at the end of this month for{" "}
+              <span className="text-yellow-300 font-bold">3 lucky users!</span>
+            </p>
+            <div className="grid grid-cols-3 gap-2">
+              <div className="prize-gold rounded-xl p-2.5 text-center">
+                <p className="text-xl">🥇</p>
+                <p className="text-yellow-300 font-black text-sm mt-0.5">$3.5</p>
+                <p className="text-yellow-600 text-[10px]">1st Prize</p>
+              </div>
+              <div className="prize-silver rounded-xl p-2.5 text-center">
+                <p className="text-xl">🥈</p>
+                <p className="text-gray-200 font-black text-sm mt-0.5">$2.5</p>
+                <p className="text-gray-500 text-[10px]">2nd Prize</p>
+              </div>
+              <div className="prize-bronze rounded-xl p-2.5 text-center">
+                <p className="text-xl">🥉</p>
+                <p className="text-orange-300 font-black text-sm mt-0.5">$1.0</p>
+                <p className="text-orange-600 text-[10px]">3rd Prize</p>
+              </div>
+            </div>
+            <p className="text-center text-yellow-700 text-[10px]">Winner drawn at end of month · Must have claimed at least once</p>
+          </div>
+
+          {/* Reward Structure */}
+          <div>
+            <h3 className="text-center text-xs font-black text-gray-400 uppercase tracking-widest mb-3">Daily Reward Structure</h3>
+            <div className="space-y-3">
+
+              {/* Cycle 1 */}
+              <div className="bg-white/4 border border-yellow-500/25 rounded-2xl overflow-hidden">
+                <div className="bg-yellow-500/10 px-3 py-2.5 flex items-center justify-between">
+                  <span className="text-yellow-400 font-black text-xs">🥉 Cycle 1 · Days 1–30</span>
+                  <span className="text-yellow-300 font-bold text-xs">2,000 / day</span>
+                </div>
+                <div className="divide-y divide-white/5">
+                  {[
+                    { day: 7,  label: "🔥 Week 1",     bonus: "+10K" },
+                    { day: 15, label: "🌟 Mid Month",  bonus: "+40K" },
+                    { day: 30, label: "👑 Full Month",  bonus: "+90K" },
+                  ].map(m => (
+                    <div key={m.day} className="grid grid-cols-3 px-3 py-2 text-[11px]">
+                      <span className="text-gray-500">Day {m.day}</span>
+                      <span className="text-gray-300 text-center">{m.label}</span>
+                      <span className="text-green-400 font-bold text-right">{m.bonus}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Cycle 2 */}
+              <div className="bg-white/4 border border-gray-400/25 rounded-2xl overflow-hidden">
+                <div className="bg-gray-400/10 px-3 py-2.5 flex items-center justify-between">
+                  <span className="text-gray-300 font-black text-xs">🥈 Cycle 2 · Days 31–60</span>
+                  <span className="text-emerald-300 font-bold text-xs">5,000 / day</span>
+                </div>
+                <div className="divide-y divide-white/5">
+                  {[
+                    { day: 37, label: "🔥 Week 1",     bonus: "+20K"  },
+                    { day: 45, label: "🌟 Mid Month",  bonus: "+80K"  },
+                    { day: 60, label: "👑 Full Month",  bonus: "+180K" },
+                  ].map(m => (
+                    <div key={m.day} className="grid grid-cols-3 px-3 py-2 text-[11px]">
+                      <span className="text-gray-500">Day {m.day}</span>
+                      <span className="text-gray-300 text-center">{m.label}</span>
+                      <span className="text-green-400 font-bold text-right">{m.bonus}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Cycle 3 */}
+              <div className="bg-white/4 border border-purple-400/25 rounded-2xl overflow-hidden">
+                <div className="bg-purple-400/10 px-3 py-2.5 flex items-center justify-between">
+                  <span className="text-purple-300 font-black text-xs">🥇👑 Cycle 3 · Days 61+</span>
+                  <span className="text-purple-300 font-bold text-xs">10,000 / day</span>
+                </div>
+                <div className="divide-y divide-white/5">
+                  {[
+                    { day: 67, label: "🔥 Week 1",     bonus: "+20K"  },
+                    { day: 75, label: "🌟 Mid Month",  bonus: "+80K"  },
+                    { day: 90, label: "👑 Full Month",  bonus: "+180K" },
+                  ].map(m => (
+                    <div key={m.day} className="grid grid-cols-3 px-3 py-2 text-[11px]">
+                      <span className="text-gray-500">Day {m.day}</span>
+                      <span className="text-gray-300 text-center">{m.label}</span>
+                      <span className="text-green-400 font-bold text-right">{m.bonus}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+            </div>
+            <p className="text-gray-700 text-[9px] text-center mt-3">Infinite progression · No resets · Keep claiming every day!</p>
+          </div>
+
         </div>
       )}
 
