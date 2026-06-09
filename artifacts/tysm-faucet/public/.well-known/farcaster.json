@@ -12,6 +12,7 @@
     "imageUrl": "https://tysm-faucet.vercel.app/og.png",
     "buttonTitle": "Claim $TYSM",
     "splashImageUrl": "https://tysm-faucet.vercel.app/Tysm-Logo.png",
-    "splashBackgroundColor": "#0d0d1a"
+    "splashBackgroundColor": "#0d0d1a",
+    "webhookUrl": "https://tysm-faucet.vercel.app/api/webhook"
   }
 }

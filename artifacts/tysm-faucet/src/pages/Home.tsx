@@ -190,6 +190,9 @@ export default function Home() {
   const [lbLoading,       setLbLoading]       = useState(false);
   const [lbUpdatedAt,     setLbUpdatedAt]     = useState(0);
   const [lbError,         setLbError]         = useState(false);
+  const [notifEnabled,    setNotifEnabled]    = useState(false);
+  const [copied,          setCopied]          = useState(false);
+  const [lbRetryKey,      setLbRetryKey]      = useState(0);
 
   const { address, isConnected } = useAccount();
   const { connect } = useConnect();
@@ -351,13 +354,16 @@ export default function Home() {
     fetchLb();
     const intervalId = setInterval(fetchLb, 15 * 60 * 1000);
     return () => { cancelled = true; clearInterval(intervalId); };
-  }, [activeTab, publicClient]);
+  }, [activeTab, publicClient, lbRetryKey]);
 
   const totalDays    = userInfoData ? Number(userInfoData[3]) : 0;
   const totalClaimed = userInfoData ? userInfoData[2] : BigInt(0);
   const faucetBal    = faucetBalData ?? BigInt(0);
   const canClaim     = canClaimData ?? false;
-  const isBusy       = isWritePending || isTxLoading;
+  const isBusy         = isWritePending || isTxLoading;
+  const globalClaims   = totalClaimsData ? Number(totalClaimsData) : 0;
+  const faucetLow      = contractReady && faucetBal > 0n && faucetBal < BigInt("500000000000000000000000");
+  const myRank         = address ? liveLeaderboard.find(e => e.address.toLowerCase() === address.toLowerCase())?.rank : undefined;
 
   const nextTotalDay  = totalDays + 1;
   const cycleInfo     = getCycleInfo(nextTotalDay);
@@ -406,6 +412,21 @@ export default function Home() {
     setTxError("");
     writeContract({ address: FAUCET_ADDRESS, abi: FAUCET_ABI, functionName: "claim", chainId: base.id });
   }, [writeContract]);
+
+  const handleEnableNotif = useCallback(async () => {
+    try {
+      await miniappSdk.actions.addFrame();
+      setNotifEnabled(true);
+    } catch { /* not in miniapp context */ }
+  }, []);
+
+  const handleCopyReferral = useCallback(() => {
+    const username = userCtx?.user?.username || "friend";
+    const link = `${APP_URL}?ref=${encodeURIComponent(username)}`;
+    navigator.clipboard.writeText(link).catch(() => {});
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }, [userCtx]);
 
   if (!sdkReady) {
     return (
@@ -518,6 +539,22 @@ export default function Home() {
             </div>
           </div>
 
+          {/* Community Stats + Faucet Warning */}
+          <div className="flex items-center justify-between bg-white/4 border border-white/8 rounded-xl px-4 py-2">
+            <span className="text-gray-500 text-[10px]">🌍 Total Global Claims</span>
+            <span className="text-yellow-400 font-black text-sm">
+              {globalClaims > 0 ? globalClaims.toLocaleString() : "—"}
+            </span>
+          </div>
+          {faucetLow && (
+            <div className="flex items-center gap-2 bg-red-950/40 border border-red-700/40 rounded-xl px-3 py-2.5">
+              <span className="text-lg">⚠️</span>
+              <p className="text-red-300 text-[11px] font-semibold leading-snug">
+                Faucet pool is running low — refill coming soon!
+              </p>
+            </div>
+          )}
+
           {/* Cycle Progress Bar */}
           <div className="bg-white/4 border border-yellow-900/20 rounded-2xl p-3.5">
             <div className="flex justify-between items-center mb-2">
@@ -611,6 +648,18 @@ export default function Home() {
                 <button onClick={handleShareAfter} className="w-full font-bold py-2.5 rounded-xl text-xs bg-white/5 border border-white/10 hover:bg-white/10 transition-all flex items-center justify-center gap-1.5 text-gray-300">
                   📢 Broadcast Your Streak
                 </button>
+                <div className="grid grid-cols-2 gap-2 mt-2">
+                  <button onClick={handleEnableNotif}
+                    className="font-bold py-2 rounded-xl text-[11px] flex items-center justify-center gap-1 transition-all active:scale-95"
+                    style={{ background: notifEnabled ? "rgba(124,58,237,0.2)" : "rgba(255,255,255,0.04)", border: notifEnabled ? "1px solid rgba(124,58,237,0.5)" : "1px solid rgba(124,58,237,0.25)", color: notifEnabled ? "#c4b5fd" : "#a78bfa" }}>
+                    {notifEnabled ? "🔔 On!" : "🔔 Notify Me"}
+                  </button>
+                  <button onClick={handleCopyReferral}
+                    className="font-bold py-2 rounded-xl text-[11px] flex items-center justify-center gap-1 transition-all active:scale-95"
+                    style={{ background: copied ? "rgba(16,185,129,0.2)" : "rgba(255,255,255,0.04)", border: copied ? "1px solid rgba(16,185,129,0.5)" : "1px solid rgba(59,130,246,0.25)", color: copied ? "#6ee7b7" : "#93c5fd" }}>
+                    {copied ? "✅ Copied!" : "🔗 Invite Friend"}
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -640,8 +689,13 @@ export default function Home() {
             </div>
 
             {lbError && (
-              <div className="px-3 py-2 bg-red-950/20 border-b border-red-800/20">
+              <div className="px-3 py-3 bg-red-950/20 border-b border-red-800/20 flex flex-col items-center gap-2">
                 <p className="text-red-400 text-[10px] text-center">Failed to load leaderboard data.</p>
+                <button
+                  onClick={() => { setLbError(false); setLbRetryKey(k => k + 1); }}
+                  className="text-[10px] font-bold text-yellow-400 bg-yellow-950/40 border border-yellow-700/30 rounded-full px-3 py-1 active:scale-95 transition-all">
+                  🔄 Retry
+                </button>
               </div>
             )}
 
@@ -834,7 +888,7 @@ export default function Home() {
       {activeTab === "board" && (
         <div className="fixed bottom-0 left-0 right-0 z-50 leaderboard-me px-4 py-2.5 backdrop-blur-sm">
           <div className="max-w-sm mx-auto grid grid-cols-12 gap-1 items-center">
-            <p className="col-span-1 text-yellow-400 font-black text-sm">—</p>
+            <p className="col-span-1 text-yellow-400 font-black text-sm">{myRank ? `#${myRank}` : "—"}</p>
             <div className="col-span-4 flex items-center gap-1">
               <p className="text-yellow-300 text-[11px] font-bold truncate">
                 @{userCtx?.user?.username || "you"}
