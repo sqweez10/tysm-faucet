@@ -322,20 +322,24 @@ export default function Home() {
           .slice(0, 10)
           .map((e, i) => ({ ...e, rank: i + 1 }));
 
-        const resolveHandle = async (addr: string): Promise<string> => {
+        const resolveUsers = async (entries: typeof rawBoard): Promise<LeaderboardEntry[]> => {
           try {
-            const res = await fetch(`https://api.warpcast.com/v2/user-by-verification?address=${addr}`);
-            if (!res.ok) return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+            const addressesParam = entries.map((e) => e.address).join(",");
+            const res = await fetch(`/api/resolve-users?addresses=${encodeURIComponent(addressesParam)}`);
+            if (!res.ok) return entries.map((e) => ({ ...e, handle: `${e.address.slice(0, 6)}...${e.address.slice(-4)}` }));
             const json = await res.json();
-            const username = json?.result?.user?.username;
-            return username ? `@${username}` : `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+            const usersByAddress = json?.users || {};
+            return entries.map((e) => {
+              const key = e.address.toLowerCase();
+              const user = usersByAddress[key];
+              return { ...e, handle: user?.handle || `${e.address.slice(0, 6)}...${e.address.slice(-4)}` };
+            });
           } catch {
-            return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+            return entries.map((e) => ({ ...e, handle: `${e.address.slice(0, 6)}...${e.address.slice(-4)}` }));
           }
         };
 
-        const handles = await Promise.all(rawBoard.map((e) => resolveHandle(e.address)));
-        const board: LeaderboardEntry[] = rawBoard.map((e, i) => ({ ...e, handle: handles[i] }));
+        const board: LeaderboardEntry[] = await resolveUsers(rawBoard);
 
         if (!cancelled) { setLiveLeaderboard(board); setLbUpdatedAt(Date.now()); }
       } catch {
@@ -371,8 +375,8 @@ export default function Home() {
     const name   = userCtx?.user?.displayName || userCtx?.user?.username || "Someone";
     const reward = fmt(rewardAmt);
     const text   = nextM
-      ? `Claiming ${reward} $TYSM on Day ${nextTotalDay}!\nOnly ${nextM.day - totalDays} days until Day ${nextM.day} milestone → ${fmt(nextM.reward)} $TYSM!\n\nClaim yours free every 24h:`
-      : `${name} is claiming $TYSM on Day ${nextTotalDay}! Free to claim every 24 hours:`;
+      ? `Claiming ${reward} $TYSM on Day ${nextTotalDay}!\nOnly ${nextM.day - totalDays} days until Day ${nextM.day} milestone → ${fmt(nextM.reward)} $TYSM!\n\nClaim yours free every 24h:\n\n@tops87sqweez`
+      : `${name} is claiming $TYSM on Day ${nextTotalDay}! Free to claim every 24 hours:\n\n@tops87sqweez`;
     const shareUrl = `${APP_URL}/share?user=${encodeURIComponent(name)}&streak=${totalDays}`;
     try {
       await miniappSdk.actions.composeCast({ text, embeds: [shareUrl] });
@@ -387,8 +391,8 @@ export default function Home() {
     const name   = userCtx?.user?.displayName || userCtx?.user?.username || "Someone";
     const reward = fmt(rewardAmt);
     const text   = isOnMile
-      ? `${name} hit Day ${totalDays} Milestone! Received ${reward} $TYSM! 🎁\n\nClaim yours free every 24h:`
-      : `${name} claimed ${reward} $TYSM! Day ${totalDays} streak! 🔥\n\nClaim yours free every 24h:`;
+      ? `${name} hit Day ${totalDays} Milestone! Received ${reward} $TYSM! 🎁\n\nClaim yours free every 24h:\n\n@tops87sqweez`
+      : `${name} claimed ${reward} $TYSM! Day ${totalDays} streak! 🔥\n\nClaim yours free every 24h:\n\n@tops87sqweez`;
     const shareUrl = `${APP_URL}/share?user=${encodeURIComponent(name)}&streak=${totalDays}`;
     try {
       await miniappSdk.actions.composeCast({ text, embeds: [shareUrl] });
