@@ -879,7 +879,7 @@ export default function Home() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-purple-300 font-black text-sm">🔗 Invite Friends</p>
-                <p className="text-gray-500 text-[10px] mt-0.5">แชร์ลิงก์ให้เพื่อน — ระบบ track อัตโนมัติ</p>
+                <p className="text-gray-500 text-[10px] mt-0.5">Share your link — tracked automatically</p>
               </div>
               <div className="text-right">
                 <p className="text-purple-400 font-black text-xl leading-none">
@@ -906,12 +906,12 @@ export default function Home() {
                   </button>
                 </div>
                 <p className="text-gray-600 text-[10px] text-center leading-relaxed">
-                  เมื่อเพื่อนเปิดแอพผ่านลิงก์ของคุณ → ระบบบันทึกให้อัตโนมัติ
+                  When your friend opens the app via your link → tracked automatically
                 </p>
               </>
             ) : (
               <p className="text-gray-600 text-[11px] text-center py-1">
-                🔌 Connect wallet เพื่อดูลิงก์ referral ของคุณ
+                🔌 Connect your wallet to see your referral link
               </p>
             )}
           </div>
