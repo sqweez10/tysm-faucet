@@ -193,6 +193,7 @@ export default function Home() {
   const [notifEnabled,    setNotifEnabled]    = useState(false);
   const [copied,          setCopied]          = useState(false);
   const [lbRetryKey,      setLbRetryKey]      = useState(0);
+  const [lbPage,          setLbPage]          = useState(1);
 
   const { address, isConnected } = useAccount();
   const { connect } = useConnect();
@@ -296,7 +297,7 @@ export default function Home() {
             if (from && tx.status === "ok" && !seen.has(from)) {
               seen.add(from);
               addresses.push(tx.from.hash as `0x${string}`);
-              if (addresses.length >= 25) break;
+              if (addresses.length >= 50) break;
             }
           }
         }
@@ -322,7 +323,7 @@ export default function Home() {
           })
           .filter((x): x is NonNullable<typeof x> => x !== null)
           .sort((a, b) => b.totalDays - a.totalDays)
-          .slice(0, 10)
+          .slice(0, 50)
           .map((e, i) => ({ ...e, rank: i + 1 }));
 
         const resolveUsers = async (entries: typeof rawBoard): Promise<LeaderboardEntry[]> => {
@@ -344,7 +345,7 @@ export default function Home() {
 
         const board: LeaderboardEntry[] = await resolveUsers(rawBoard);
 
-        if (!cancelled) { setLiveLeaderboard(board); setLbUpdatedAt(Date.now()); }
+        if (!cancelled) { setLiveLeaderboard(board); setLbUpdatedAt(Date.now()); setLbPage(1); }
       } catch {
         if (!cancelled) setLbError(true);
       } finally {
@@ -381,8 +382,8 @@ export default function Home() {
     const name   = userCtx?.user?.displayName || userCtx?.user?.username || "Someone";
     const reward = fmt(rewardAmt);
     const text   = nextM
-      ? `Claiming ${reward} $TYSM on Day ${nextTotalDay}!\nOnly ${nextM.day - totalDays} days until Day ${nextM.day} milestone → ${fmt(nextM.reward)} $TYSM!\n\nClaim yours free every 24h:\n\n@tops87sqweez`
-      : `${name} is claiming $TYSM on Day ${nextTotalDay}! Free to claim every 24 hours:\n\n@tops87sqweez`;
+      ? `Claiming ${reward} $TYSM on Day ${nextTotalDay}!\nOnly ${nextM.day - totalDays} days until Day ${nextM.day} milestone → ${fmt(nextM.reward)} $TYSM!\n\nClaim yours free every 24h:\n\n@tops87sqweezz.base.eth`
+      : `${name} is claiming $TYSM on Day ${nextTotalDay}! Free to claim every 24 hours:\n\n@tops87sqweezz.base.eth`;
     const shareUrl = `${APP_URL}/share?user=${encodeURIComponent(name)}&streak=${totalDays}`;
     try {
       await miniappSdk.actions.composeCast({ text, embeds: [shareUrl] });
@@ -397,8 +398,8 @@ export default function Home() {
     const name   = userCtx?.user?.displayName || userCtx?.user?.username || "Someone";
     const reward = fmt(rewardAmt);
     const text   = isOnMile
-      ? `${name} hit Day ${totalDays} Milestone! Received ${reward} $TYSM! 🎁\n\nClaim yours free every 24h:\n\n@tops87sqweez`
-      : `${name} claimed ${reward} $TYSM! Day ${totalDays} streak! 🔥\n\nClaim yours free every 24h:\n\n@tops87sqweez`;
+      ? `${name} hit Day ${totalDays} Milestone! Received ${reward} $TYSM! 🎁\n\nClaim yours free every 24h:\n\n@tops87sqweezz.base.eth`
+      : `${name} claimed ${reward} $TYSM! Day ${totalDays} streak! 🔥\n\nClaim yours free every 24h:\n\n@tops87sqweezz.base.eth`;
     const shareUrl = `${APP_URL}/share?user=${encodeURIComponent(name)}&streak=${totalDays}`;
     try {
       await miniappSdk.actions.composeCast({ text, embeds: [shareUrl] });
@@ -728,40 +729,92 @@ export default function Home() {
               </div>
             )}
 
-            {liveLeaderboard.length > 0 && (
-              <div className="divide-y divide-white/5">
-                {liveLeaderboard.map((row) => {
-                  const ci        = getCycleInfo(row.totalDays);
-                  const rankColor =
-                    row.rank === 1 ? "#f59e0b"
-                    : row.rank === 2 ? "#9ca3af"
-                    : row.rank === 3 ? "#d97706"
-                    : "#4b5563";
-                  return (
-                    <div key={row.address}
-                      className="grid grid-cols-12 gap-1 px-3 py-2.5 items-center transition-colors hover:bg-white/3">
-                      <p className="col-span-1 font-black text-sm" style={{ color: rankColor }}>
-                        {row.rank <= 3 ? ["🥇", "🥈", "🥉"][row.rank - 1] : row.rank}
-                      </p>
-                      <div className="col-span-4 flex items-center gap-1 min-w-0">
-                        <p className="text-gray-300 text-[11px] font-medium truncate">{row.handle}</p>
-                        <CycleBadge cycle={ci.cycle} />
-                      </div>
-                      <p className="col-span-2 text-yellow-400 font-black text-[11px] text-center">{row.totalDays}🔥</p>
-                      <p className="col-span-2 text-green-400 text-[10px] font-bold text-center">
-                        {(ci.baseRate / 1000).toFixed(0)}K
-                      </p>
-                      <div className="col-span-3 flex justify-center">
-                        <span className="text-[9px] font-bold rounded-full px-1.5 py-0.5"
-                          style={{ color: heartColor(row.hearts), background: heartBg(row.hearts), border: `1px solid ${heartColor(row.hearts)}40` }}>
-                          {row.hearts}/3
-                        </span>
-                      </div>
+            {liveLeaderboard.length > 0 && (() => {
+              const LB_PER_PAGE = 10;
+              const totalPages  = Math.ceil(liveLeaderboard.length / LB_PER_PAGE);
+              const pageRows    = liveLeaderboard.slice((lbPage - 1) * LB_PER_PAGE, lbPage * LB_PER_PAGE);
+
+              const pageNums = (() => {
+                if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i + 1);
+                const pages: (number | "...")[] = [1];
+                if (lbPage > 3) pages.push("...");
+                for (let p = Math.max(2, lbPage - 1); p <= Math.min(totalPages - 1, lbPage + 1); p++) pages.push(p);
+                if (lbPage < totalPages - 2) pages.push("...");
+                pages.push(totalPages);
+                return pages;
+              })();
+
+              return (
+                <>
+                  <div className="divide-y divide-white/5">
+                    {pageRows.map((row) => {
+                      const ci        = getCycleInfo(row.totalDays);
+                      const rankColor =
+                        row.rank === 1 ? "#f59e0b"
+                        : row.rank === 2 ? "#9ca3af"
+                        : row.rank === 3 ? "#d97706"
+                        : "#4b5563";
+                      return (
+                        <div key={row.address}
+                          className="grid grid-cols-12 gap-1 px-3 py-2.5 items-center transition-colors hover:bg-white/3">
+                          <p className="col-span-1 font-black text-sm" style={{ color: rankColor }}>
+                            {row.rank <= 3 ? ["🥇", "🥈", "🥉"][row.rank - 1] : row.rank}
+                          </p>
+                          <div className="col-span-4 flex items-center gap-1 min-w-0">
+                            <p className="text-gray-300 text-[11px] font-medium truncate">{row.handle}</p>
+                            <CycleBadge cycle={ci.cycle} />
+                          </div>
+                          <p className="col-span-2 text-yellow-400 font-black text-[11px] text-center">{row.totalDays}🔥</p>
+                          <p className="col-span-2 text-green-400 text-[10px] font-bold text-center">
+                            {(ci.baseRate / 1000).toFixed(0)}K
+                          </p>
+                          <div className="col-span-3 flex justify-center">
+                            <span className="text-[9px] font-bold rounded-full px-1.5 py-0.5"
+                              style={{ color: heartColor(row.hearts), background: heartBg(row.hearts), border: `1px solid ${heartColor(row.hearts)}40` }}>
+                              {row.hearts}/3
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {totalPages > 1 && (
+                    <div className="flex items-center justify-center gap-1 px-3 py-3 border-t border-white/5">
+                      <button
+                        onClick={() => setLbPage(p => Math.max(1, p - 1))}
+                        disabled={lbPage === 1}
+                        className="w-7 h-7 rounded-full text-xs font-bold flex items-center justify-center transition-all disabled:opacity-30"
+                        style={{ background: "rgba(255,255,255,0.05)", color: "#9ca3af" }}>
+                        ‹
+                      </button>
+                      {pageNums.map((p, i) =>
+                        p === "..." ? (
+                          <span key={`dot-${i}`} className="w-7 h-7 flex items-center justify-center text-gray-600 text-xs">…</span>
+                        ) : (
+                          <button
+                            key={p}
+                            onClick={() => setLbPage(p as number)}
+                            className="w-7 h-7 rounded-full text-[11px] font-bold flex items-center justify-center transition-all active:scale-95"
+                            style={lbPage === p
+                              ? { background: "#7c3aed", color: "#fff", boxShadow: "0 0 8px rgba(124,58,237,0.5)" }
+                              : { background: "rgba(255,255,255,0.05)", color: "#6b7280" }}>
+                            {p}
+                          </button>
+                        )
+                      )}
+                      <button
+                        onClick={() => setLbPage(p => Math.min(totalPages, p + 1))}
+                        disabled={lbPage === totalPages}
+                        className="w-7 h-7 rounded-full text-xs font-bold flex items-center justify-center transition-all disabled:opacity-30"
+                        style={{ background: "rgba(255,255,255,0.05)", color: "#9ca3af" }}>
+                        ›
+                      </button>
                     </div>
-                  );
-                })}
-              </div>
-            )}
+                  )}
+                </>
+              );
+            })()}
 
             <div className="px-3 py-2 border-t border-white/5">
               <p className="text-gray-700 text-[9px] text-center">
