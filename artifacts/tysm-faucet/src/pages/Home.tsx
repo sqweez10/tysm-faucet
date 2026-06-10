@@ -194,6 +194,9 @@ export default function Home() {
   const [copied,          setCopied]          = useState(false);
   const [lbRetryKey,      setLbRetryKey]      = useState(0);
   const [lbPage,          setLbPage]          = useState(1);
+  const [refCount,        setRefCount]        = useState<number | null>(null);
+  const [refLoading,      setRefLoading]      = useState(false);
+  const [refCopied,       setRefCopied]       = useState(false);
 
   const { address, isConnected } = useAccount();
   const { connect } = useConnect();
@@ -357,6 +360,42 @@ export default function Home() {
     return () => { cancelled = true; clearInterval(intervalId); };
   }, [activeTab, publicClient, lbRetryKey]);
 
+  // Read ?ref= from URL on mount → save to localStorage
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const ref = params.get("ref");
+      if (ref && ref.startsWith("0x")) {
+        localStorage.setItem("tysm_ref", ref.toLowerCase());
+      }
+    } catch { /* ignore */ }
+  }, []);
+
+  // Track referral when wallet connects
+  useEffect(() => {
+    if (!address) return;
+    try {
+      const referrer = localStorage.getItem("tysm_ref");
+      if (!referrer || referrer === address.toLowerCase()) return;
+      fetch("/api/referral-track", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ referrer, referee: address.toLowerCase() }),
+      }).then(() => localStorage.removeItem("tysm_ref")).catch(() => {});
+    } catch { /* ignore */ }
+  }, [address]);
+
+  // Fetch referral stats when rewards tab opens
+  useEffect(() => {
+    if (activeTab !== "rewards" || !address) return;
+    setRefLoading(true);
+    fetch(`/api/referral-stats?address=${encodeURIComponent(address.toLowerCase())}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setRefCount(d.count); })
+      .catch(() => {})
+      .finally(() => setRefLoading(false));
+  }, [activeTab, address]);
+
   const totalDays    = userInfoData ? Number(userInfoData[3]) : 0;
   const totalClaimed = userInfoData ? userInfoData[2] : BigInt(0);
   const faucetBal    = faucetBalData ?? BigInt(0);
@@ -422,12 +461,18 @@ export default function Home() {
   }, []);
 
   const handleCopyReferral = useCallback(() => {
-    const username = userCtx?.user?.username || "friend";
-    const link = `${APP_URL}?ref=${encodeURIComponent(username)}`;
+    const link = address ? `${APP_URL}?ref=${address}` : APP_URL;
     navigator.clipboard.writeText(link).catch(() => {});
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
-  }, [userCtx]);
+  }, [address]);
+
+  const handleCopyRefLink = useCallback(() => {
+    const link = address ? `${APP_URL}?ref=${address}` : APP_URL;
+    navigator.clipboard.writeText(link).catch(() => {});
+    setRefCopied(true);
+    setTimeout(() => setRefCopied(false), 2500);
+  }, [address]);
 
   if (!sdkReady) {
     return (
@@ -828,6 +873,48 @@ export default function Home() {
       {/* REWARDS TAB */}
       {activeTab === "rewards" && (
         <div className="max-w-sm mx-auto px-4 pt-4 pb-8 space-y-4">
+
+          {/* Referral Section */}
+          <div className="bg-white/4 border border-purple-700/30 rounded-2xl p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-purple-300 font-black text-sm">🔗 Invite Friends</p>
+                <p className="text-gray-500 text-[10px] mt-0.5">แชร์ลิงก์ให้เพื่อน — ระบบ track อัตโนมัติ</p>
+              </div>
+              <div className="text-right">
+                <p className="text-purple-400 font-black text-xl leading-none">
+                  {refLoading ? "…" : (refCount ?? 0)}
+                </p>
+                <p className="text-gray-600 text-[9px] uppercase tracking-wider">Friends</p>
+              </div>
+            </div>
+
+            {isConnected && address ? (
+              <>
+                <div className="bg-black/30 border border-white/8 rounded-xl px-3 py-2 flex items-center gap-2">
+                  <p className="text-gray-400 text-[10px] flex-1 truncate font-mono">
+                    {APP_URL}?ref={address.slice(0, 8)}...
+                  </p>
+                  <button onClick={handleCopyRefLink}
+                    className="shrink-0 text-[10px] font-bold px-2.5 py-1 rounded-full transition-all active:scale-95"
+                    style={{
+                      background: refCopied ? "rgba(16,185,129,0.2)" : "rgba(124,58,237,0.2)",
+                      border: refCopied ? "1px solid rgba(16,185,129,0.5)" : "1px solid rgba(124,58,237,0.4)",
+                      color: refCopied ? "#6ee7b7" : "#c4b5fd"
+                    }}>
+                    {refCopied ? "✅ Copied!" : "📋 Copy"}
+                  </button>
+                </div>
+                <p className="text-gray-600 text-[10px] text-center leading-relaxed">
+                  เมื่อเพื่อนเปิดแอพผ่านลิงก์ของคุณ → ระบบบันทึกให้อัตโนมัติ
+                </p>
+              </>
+            ) : (
+              <p className="text-gray-600 text-[11px] text-center py-1">
+                🔌 Connect wallet เพื่อดูลิงก์ referral ของคุณ
+              </p>
+            )}
+          </div>
 
           {/* Monthly Lucky Draw Banner */}
           <div style={{
