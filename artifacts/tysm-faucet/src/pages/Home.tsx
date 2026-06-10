@@ -39,6 +39,22 @@ const FAUCET_ABI = [
 const ZERO_ADDR = "0x0000000000000000000000000000000000000000";
 const contractReady = FAUCET_ADDRESS !== ZERO_ADDR;
 
+const REFERRAL_ADDRESS = (import.meta.env.VITE_REFERRAL_CONTRACT_ADDRESS || ZERO_ADDR) as `0x${string}`;
+const referralReady = REFERRAL_ADDRESS !== ZERO_ADDR;
+
+const REFERRAL_ABI = [
+  { name: "pendingRewards", type: "function", stateMutability: "view",
+    inputs: [{ name: "", type: "address" }], outputs: [{ type: "uint256" }] },
+  { name: "referralCount",  type: "function", stateMutability: "view",
+    inputs: [{ name: "", type: "address" }], outputs: [{ type: "uint256" }] },
+  { name: "claimRewards",   type: "function", stateMutability: "nonpayable",
+    inputs: [], outputs: [] },
+  { name: "poolBalance",    type: "function", stateMutability: "view",
+    inputs: [], outputs: [{ type: "uint256" }] },
+  { name: "isReferred",     type: "function", stateMutability: "view",
+    inputs: [{ name: "", type: "address" }], outputs: [{ type: "bool" }] },
+] as const;
+
 function formatCountdown(s: number): string {
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);
@@ -227,6 +243,16 @@ export default function Home() {
   const { writeContract, data: txHash, isPending: isWritePending, error: writeError } = useWriteContract();
   const { isLoading: isTxLoading, isSuccess: isTxSuccess } = useWaitForTransactionReceipt({ hash: txHash });
 
+  const refBaseQ = { query: { enabled: referralReady && !!address } };
+  const { data: pendingRefData, refetch: refetchPendingRef } = useReadContract({
+    address: REFERRAL_ADDRESS, abi: REFERRAL_ABI, functionName: "pendingRewards",
+    args: [address!], ...refBaseQ,
+  });
+  const { writeContract: writeRefClaim, data: refClaimHash, isPending: isRefClaimPending } = useWriteContract();
+  const { isLoading: isRefClaimLoading, isSuccess: isRefClaimSuccess } = useWaitForTransactionReceipt({ hash: refClaimHash });
+
+  useEffect(() => { if (isRefClaimSuccess) refetchPendingRef(); }, [isRefClaimSuccess, refetchPendingRef]);
+
   useEffect(() => {
     const load = async () => {
       try {
@@ -365,23 +391,34 @@ export default function Home() {
     try {
       const params = new URLSearchParams(window.location.search);
       const ref = params.get("ref");
-      if (ref && ref.startsWith("0x")) {
+      // Strict validation: must be full 42-char ETH address
+      if (ref && /^0x[a-fA-F0-9]{40}$/.test(ref)) {
         localStorage.setItem("tysm_ref", ref.toLowerCase());
       }
     } catch { /* ignore */ }
   }, []);
 
-  // Track referral when wallet connects
+  // Track referral when wallet connects — cleanup only on confirmed API success
   useEffect(() => {
     if (!address) return;
     try {
       const referrer = localStorage.getItem("tysm_ref");
       if (!referrer || referrer === address.toLowerCase()) return;
+      // Extra safety: re-validate stored address format before sending
+      if (!/^0x[a-fA-F0-9]{40}$/.test(referrer)) {
+        localStorage.removeItem("tysm_ref");
+        return;
+      }
       fetch("/api/referral-track", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ referrer, referee: address.toLowerCase() }),
-      }).then(() => localStorage.removeItem("tysm_ref")).catch(() => {});
+      })
+        .then(async (r) => {
+          // Only clear localStorage if server confirmed success or "already tracked"
+          if (r.ok) localStorage.removeItem("tysm_ref");
+        })
+        .catch(() => { /* keep localStorage so it retries on next mount */ });
     } catch { /* ignore */ }
   }, [address]);
 
@@ -875,46 +912,90 @@ export default function Home() {
         <div className="max-w-sm mx-auto px-4 pt-4 pb-8 space-y-4">
 
           {/* Referral Section */}
-          <div className="bg-white/4 border border-purple-700/30 rounded-2xl p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-purple-300 font-black text-sm">🔗 Invite Friends</p>
-                <p className="text-gray-500 text-[10px] mt-0.5">Share your link — tracked automatically</p>
-              </div>
-              <div className="text-right">
-                <p className="text-purple-400 font-black text-xl leading-none">
-                  {refLoading ? "…" : (refCount ?? 0)}
-                </p>
-                <p className="text-gray-600 text-[9px] uppercase tracking-wider">Friends</p>
-              </div>
-            </div>
-
-            {isConnected && address ? (
-              <>
-                <div className="bg-black/30 border border-white/8 rounded-xl px-3 py-2 flex items-center gap-2">
-                  <p className="text-gray-400 text-[10px] flex-1 truncate font-mono">
-                    {APP_URL}?ref={address.slice(0, 8)}...
-                  </p>
-                  <button onClick={handleCopyRefLink}
-                    className="shrink-0 text-[10px] font-bold px-2.5 py-1 rounded-full transition-all active:scale-95"
-                    style={{
-                      background: refCopied ? "rgba(16,185,129,0.2)" : "rgba(124,58,237,0.2)",
-                      border: refCopied ? "1px solid rgba(16,185,129,0.5)" : "1px solid rgba(124,58,237,0.4)",
-                      color: refCopied ? "#6ee7b7" : "#c4b5fd"
-                    }}>
-                    {refCopied ? "✅ Copied!" : "📋 Copy"}
-                  </button>
+          {(() => {
+            const pendingRefWei  = (pendingRefData as bigint | undefined) ?? BigInt(0);
+            const hasPending     = pendingRefWei > BigInt(0);
+            const pendingFmt     = hasPending ? formatUnits(pendingRefWei, 18).replace(/\.(\d{0,0})\d*$/, "") : "0";
+            const isClaimBusy    = isRefClaimPending || isRefClaimLoading;
+            return (
+              <div className="bg-white/4 border border-purple-700/30 rounded-2xl p-4 space-y-3">
+                {/* Header row */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-purple-300 font-black text-sm">🔗 Invite Friends</p>
+                    <p className="text-gray-500 text-[10px] mt-0.5">Share your link — tracked automatically</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-purple-400 font-black text-xl leading-none">
+                      {refLoading ? "…" : (refCount ?? 0)}
+                    </p>
+                    <p className="text-gray-600 text-[9px] uppercase tracking-wider">Friends</p>
+                  </div>
                 </div>
-                <p className="text-gray-600 text-[10px] text-center leading-relaxed">
-                  When your friend opens the app via your link → tracked automatically
-                </p>
-              </>
-            ) : (
-              <p className="text-gray-600 text-[11px] text-center py-1">
-                🔌 Connect your wallet to see your referral link
-              </p>
-            )}
-          </div>
+
+                {isConnected && address ? (
+                  <>
+                    {/* Referral link */}
+                    <div className="bg-black/30 border border-white/8 rounded-xl px-3 py-2 flex items-center gap-2">
+                      <p className="text-gray-400 text-[10px] flex-1 truncate font-mono">
+                        {APP_URL}?ref={address.slice(0, 8)}…
+                      </p>
+                      <button onClick={handleCopyRefLink}
+                        className="shrink-0 text-[10px] font-bold px-2.5 py-1 rounded-full transition-all active:scale-95"
+                        style={{
+                          background: refCopied ? "rgba(16,185,129,0.2)" : "rgba(124,58,237,0.2)",
+                          border: refCopied ? "1px solid rgba(16,185,129,0.5)" : "1px solid rgba(124,58,237,0.4)",
+                          color: refCopied ? "#6ee7b7" : "#c4b5fd"
+                        }}>
+                        {refCopied ? "✅ Copied!" : "📋 Copy"}
+                      </button>
+                    </div>
+
+                    {/* Reward tiers */}
+                    <div className="grid grid-cols-3 gap-1.5 text-center">
+                      {[
+                        { range: "1–5",  reward: "5K",  color: "#a78bfa" },
+                        { range: "6–10", reward: "8K",  color: "#818cf8" },
+                        { range: "11+",  reward: "12K", color: "#6366f1" },
+                      ].map(t => (
+                        <div key={t.range} className="bg-white/4 border border-white/8 rounded-xl py-2">
+                          <p className="font-black text-xs" style={{ color: t.color }}>{t.reward} $TYSM</p>
+                          <p className="text-gray-600 text-[9px]">per ref ({t.range})</p>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Pending rewards + claim */}
+                    {referralReady && (
+                      <div className="flex items-center justify-between bg-black/20 border border-purple-800/30 rounded-xl px-3 py-2.5">
+                        <div>
+                          <p className="text-gray-500 text-[9px] uppercase tracking-wider">Claimable Reward</p>
+                          <p className="text-purple-300 font-black text-base leading-tight">
+                            {hasPending ? `${Number(pendingFmt).toLocaleString()} $TYSM` : "—"}
+                          </p>
+                        </div>
+                        <button
+                          disabled={!hasPending || isClaimBusy}
+                          onClick={() => writeRefClaim({ address: REFERRAL_ADDRESS, abi: REFERRAL_ABI, functionName: "claimRewards", chainId: base.id })}
+                          className="text-[11px] font-bold px-3 py-1.5 rounded-full transition-all active:scale-95 disabled:opacity-40"
+                          style={{ background: hasPending ? "rgba(124,58,237,0.3)" : "rgba(255,255,255,0.05)", border: "1px solid rgba(124,58,237,0.4)", color: "#c4b5fd" }}>
+                          {isClaimBusy ? "Claiming…" : "Claim 🎁"}
+                        </button>
+                      </div>
+                    )}
+
+                    <p className="text-gray-600 text-[10px] text-center leading-relaxed">
+                      When your friend opens the app via your link → tracked automatically
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-gray-600 text-[11px] text-center py-1">
+                    🔌 Connect your wallet to see your referral link
+                  </p>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Monthly Lucky Draw Banner */}
           <div style={{
