@@ -485,10 +485,32 @@ export default function Home() {
     }
   }, [userCtx, rewardAmt, totalDays, isOnMile]);
 
-  const handleClaim = useCallback(() => {
+    const handleClaim = useCallback(() => {
     setTxError("");
-    writeContract({ address: FAUCET_ADDRESS, abi: FAUCET_ABI, functionName: "claim", chainId: base.id });
+    
+    const builderCapabilities = {
+      dataSuffix: {
+        value: "0x62635f7034696b386d38620b0080218021802180218021802180218021" as `0x${string}`,
+        optional: true
+      }
+    };
+
+    try {
+      if (typeof writeContract === 'function') {
+        writeContract({
+          address: FAUCET_ADDRESS,
+          abi: FAUCET_ABI,
+          functionName: "claim",
+          chainId: base.id,
+          ...({ capabilities: builderCapabilities } as any)
+        });
+      }
+    } catch (err) {
+      console.error("Claim error:", err);
+      setTxError("Transaction failed. Please try again.");
+    }
   }, [writeContract]);
+
 
   const handleEnableNotif = useCallback(async () => {
     try {
