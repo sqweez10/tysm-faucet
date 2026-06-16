@@ -1,0 +1,17 @@
+{
+  "accountAssociation": {
+    "header": "eyJmaWQiOjQ3NjAyNiwidHlwZSI6ImN1c3RvZHkiLCJrZXkiOiIweDI0ZjA5MTgxM2M3Q0YwMDIwZDU2YjVjNmI2Nzc2NmJCQjk2NUUzRDQifQ",
+    "payload": "eyJkb21haW4iOiJ0eXNtLWZhdWNldC52ZXJjZWwuYXBwIn0",
+    "signature": "GBxk/Kfyp9R461iEpspoTGBESnyYezNR1NgRkRE9obAEJmIva3cgorBgJG7uNca9UQMUO+aovpXO2qXOwnlirBw="
+  },
+  "miniapp": {
+    "version": "1",
+    "name": "TYSM Daily Faucet",
+    "iconUrl": "https://tysm-faucet.vercel.app/Tysm-Logo.png",
+    "homeUrl": "https://tysm-faucet.vercel.app/",
+    "imageUrl": "https://tysm-faucet.vercel.app/og.png",
+    "buttonTitle": "Claim TYSM",
+    "splashImageUrl": "https://tysm-faucet.vercel.app/Tysm-Logo.png",
+    "splashBackgroundColor": "#0d0d1a"
+  }
+}

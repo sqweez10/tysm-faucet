@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "TYSM Daily Faucet"
+version = "1.0.0"
+id = "artifacts/tysm-faucet"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 24555
+
+[services.development]
+run = "pnpm --filter @workspace/tysm-faucet run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/tysm-faucet", "run", "build" ]
+publicDir = "artifacts/tysm-faucet/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "24555"
+BASE_PATH = "/"
