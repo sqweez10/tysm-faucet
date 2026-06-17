@@ -1,0 +1,32 @@
+modules = ["python-3.12"]
+
+[nix]
+channels = ["nixpkgs-24.05"]
+
+[unitTest]
+runner = "poetry run pytest"
+
+[languages.python]
+pattern = "**/*.py"
+
+[languages.python.languageServer]
+start = "pylsp"
+
+[env]
+VITE_APP_URL = "https://tysm-faucet.vercel.app"
+NODE_ENV = "development"
+
+[workflows]
+runMode = "onSave"
+
+[[workflows.workflow]]
+name = "Build"
+pattern = ".*"
+trigger = "onChange"
+cmdPattern = "cd /home/runner && npm run build"
+
+[[workflows.workflow]]
+name = "Typecheck"
+pattern = ".*\.ts.*"
+trigger = "onChange"
+cmdPattern = "cd /home/runner && pnpm run typecheck"

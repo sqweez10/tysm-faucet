@@ -1,0 +1,22 @@
+# Replit ignore
+# File patterns that should be ignored
+
+.git
+.gitignore
+.replit
+.replitignore
+
+node_modules
+pnpm-lock.yaml
+yarn.lock
+package-lock.json
+
+.cache
+.local
+
+dist
+build
+out
+
+.env
+.env.local
