@@ -439,7 +439,7 @@ export default function Home() {
   const canClaim     = canClaimData ?? false;
   const isBusy         = isWritePending || isTxLoading;
   const globalClaims   = totalClaimsData ? Number(totalClaimsData) : 0;
-  const faucetLow      = contractReady && faucetBal > 0n && faucetBal < BigInt("500000000000000000000000");
+  const faucetLow = contractReady && faucetBal > 0n && faucetBal < BigInt("100000000000000000000000"); // 100,000 TYSM
   const myRank         = address ? liveLeaderboard.find(e => e.address.toLowerCase() === address.toLowerCase())?.rank : undefined;
 
   const nextTotalDay  = totalDays + 1;
