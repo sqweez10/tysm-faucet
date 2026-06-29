@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+// [จุดแก้ไขที่ 1] เพิ่มการ import useRef เข้ามาใช้งาน
+import { useEffect, useState, useCallback, useRef } from "react";
 // @ts-ignore
 import sdk from "@farcaster/frame-sdk";
 // @ts-ignore
@@ -249,8 +250,10 @@ export default function Home() {
   const [refLoading,      setRefLoading]      = useState(false);
   const [refCopied,       setRefCopied]       = useState(false);
 
+  // [จุดแก้ไขที่ 2] อัปเดตการพิมพ์ของ useState และสร้าง processedClaimTxRef บล็อกธุรกรรมซ้ำ
   const [claimHistory, setClaimHistory] = useState<ClaimHistoryItem[]>([]);
   const [lastClaim, setLastClaim] = useState<ClaimHistoryItem | null>(null);
+  const processedClaimTxRef = useRef<`0x${string}` | null>(null);
 
   const { address, isConnected } = useAccount();
 
@@ -352,8 +355,12 @@ export default function Home() {
   const nextM         = getNextMilestone(totalDays);
   const { pos: cyclePos, pct: cyclePct } = getCycleProgress(totalDays);
 
+  // [จุดแก้ไขที่ 3] ตรวจสอบ txHash ผ่าน useRef ป้องกันการบันทึกประวัติซ้ำซ้อน
   useEffect(() => {
     if (!isTxSuccess || !txHash) return;
+    if (processedClaimTxRef.current === txHash) return;
+
+    processedClaimTxRef.current = txHash;
 
     setJustClaimed(true);
     setHasShared(false);
@@ -529,7 +536,6 @@ export default function Home() {
     try {
       const params = new URLSearchParams(window.location.search);
       const ref = params.get("ref");
-      // Strict validation: must be full 42-char ETH address
       if (ref && /^0x[a-fA-F0-9]{40}$/.test(ref)) {
         localStorage.setItem("tysm_ref", ref.toLowerCase());
       }
@@ -542,7 +548,6 @@ export default function Home() {
     try {
       const referrer = localStorage.getItem("tysm_ref");
       if (!referrer || referrer === address.toLowerCase()) return;
-      // Extra safety: re-validate stored address format before sending
       if (!/^0x[a-fA-F0-9]{40}$/.test(referrer)) {
         localStorage.removeItem("tysm_ref");
         return;
@@ -553,7 +558,6 @@ export default function Home() {
         body: JSON.stringify({ referrer, referee: address.toLowerCase() }),
       })
         .then(async (r) => {
-          // Only clear localStorage if server confirmed success or "already tracked"
           if (r.ok) localStorage.removeItem("tysm_ref");
         })
         .catch(() => { /* keep localStorage so it retries on next mount */ });
@@ -941,7 +945,7 @@ export default function Home() {
                         {item.actualReward
                           ? `${Number(item.actualReward).toLocaleString("en-US", {
                               maximumFractionDigits: 0,
-                            })} TYSM`
+                          })} TYSM`
                           : `${fmt(item.expectedReward)} TYSM expected`}
                       </div>
 
