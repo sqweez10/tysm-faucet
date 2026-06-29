@@ -11,7 +11,7 @@ import {
 } from "wagmi";
 // @ts-ignore
 import { farcasterFrame } from "@farcaster/frame-wagmi-connector";
-import { formatUnits } from "viem";
+import { formatUnits, parseAbiItem, decodeEventLog } from "viem";
 import { base } from "wagmi/chains";
 
 const FAUCET_ADDRESS = (import.meta.env.VITE_FAUCET_ADDRESS ||
@@ -38,6 +38,41 @@ const FAUCET_ABI = [
 
 const ZERO_ADDR = "0x0000000000000000000000000000000000000000";
 const contractReady = FAUCET_ADDRESS !== ZERO_ADDR;
+
+const TYSM_TOKEN_ADDRESS =
+  "0x0358795322c04de04ead2338a803a9d3518a9877" as `0x${string}`;
+
+type ClaimHistoryItem = {
+  txHash: `0x${string}`;
+  wallet: string;
+  claimedDay: number;
+  expectedReward: number;
+  actualReward?: string;
+  createdAt: string;
+};
+
+function claimHistoryKey(wallet?: string) {
+  return wallet ? `tysm_claim_history_${wallet.toLowerCase()}` : "tysm_claim_history";
+}
+
+function loadClaimHistory(wallet?: string): ClaimHistoryItem[] {
+  if (typeof window === "undefined") return [];
+
+  try {
+    return JSON.parse(localStorage.getItem(claimHistoryKey(wallet)) || "[]");
+  } catch {
+    return [];
+  }
+}
+
+function saveClaimHistory(wallet: string | undefined, item: ClaimHistoryItem) {
+  if (!wallet || typeof window === "undefined") return;
+
+  const prev = loadClaimHistory(wallet);
+  const next = [item, ...prev.filter((x) => x.txHash !== item.txHash)].slice(0, 10);
+
+  localStorage.setItem(claimHistoryKey(wallet), JSON.stringify(next));
+}
 
 const REFERRAL_ADDRESS = (import.meta.env.VITE_REFERRAL_CONTRACT_ADDRESS || ZERO_ADDR) as `0x${string}`;
 const referralReady = REFERRAL_ADDRESS !== ZERO_ADDR;
@@ -214,7 +249,16 @@ export default function Home() {
   const [refLoading,      setRefLoading]      = useState(false);
   const [refCopied,       setRefCopied]       = useState(false);
 
+  const [claimHistory, setClaimHistory] = useState<ClaimHistoryItem[]>([]);
+  const [lastClaim, setLastClaim] = useState<ClaimHistoryItem | null>(null);
+
   const { address, isConnected } = useAccount();
+
+  useEffect(() => {
+    if (!address) return;
+    setClaimHistory(loadClaimHistory(address));
+  }, [address]);
+
   const { connect } = useConnect();
   const publicClient = usePublicClient();
   const baseQ = { query: { enabled: contractReady && !!address } };
@@ -241,7 +285,11 @@ export default function Home() {
   });
 
   const { writeContract, data: txHash, isPending: isWritePending, error: writeError } = useWriteContract();
-  const { isLoading: isTxLoading, isSuccess: isTxSuccess } = useWaitForTransactionReceipt({ hash: txHash });
+  const {
+    data: txReceipt,
+    isLoading: isTxLoading,
+    isSuccess: isTxSuccess,
+  } = useWaitForTransactionReceipt({ hash: txHash });
 
   const refBaseQ = { query: { enabled: referralReady && !!address } };
   const { data: pendingRefData, refetch: refetchPendingRef } = useReadContract({
@@ -289,12 +337,102 @@ export default function Home() {
     return () => clearInterval(id);
   }, []);
 
+  const totalDays    = userInfoData ? Number(userInfoData[3]) : 0;
+  const totalClaimed = userInfoData ? userInfoData[2] : BigInt(0);
+  const faucetBal    = faucetBalData ?? BigInt(0);
+  const canClaim     = canClaimData ?? false;
+  const isBusy         = isWritePending || isTxLoading;
+  const globalClaims   = totalClaimsData ? Number(totalClaimsData) : 0;
+  const faucetLow = contractReady && faucetBal > 0n && faucetBal < BigInt("100000000000000000000000"); // 100,000 TYSM
+
+  const nextTotalDay  = totalDays + 1;
+  const cycleInfo     = getCycleInfo(nextTotalDay);
+  const rewardAmt     = getDailyReward(nextTotalDay);
+  const isOnMile      = isMilestoneDay(nextTotalDay);
+  const nextM         = getNextMilestone(totalDays);
+  const { pos: cyclePos, pct: cyclePct } = getCycleProgress(totalDays);
+
   useEffect(() => {
-    if (!isTxSuccess) return;
+    if (!isTxSuccess || !txHash) return;
+
     setJustClaimed(true);
     setHasShared(false);
-    refetchCanClaim(); refetchTimeLeft(); refetchUserInfo(); refetchBalance();
-  }, [isTxSuccess, refetchCanClaim, refetchTimeLeft, refetchUserInfo, refetchBalance]);
+
+    let actualReward: string | undefined;
+
+    try {
+      const transferEvent = parseAbiItem(
+        "event Transfer(address indexed from, address indexed to, uint256 value)"
+      );
+
+      const transferLog = txReceipt?.logs.find((log) => {
+        if (log.address.toLowerCase() !== TYSM_TOKEN_ADDRESS.toLowerCase()) return false;
+
+        try {
+          const decoded = decodeEventLog({
+            abi: [transferEvent],
+            data: log.data,
+            topics: log.topics,
+          });
+
+          const from = String(decoded.args.from).toLowerCase();
+          const to = String(decoded.args.to).toLowerCase();
+
+          return (
+            from === FAUCET_ADDRESS.toLowerCase() &&
+            !!address &&
+            to === address.toLowerCase()
+          );
+        } catch {
+          return false;
+        }
+      });
+
+      if (transferLog) {
+        const decoded = decodeEventLog({
+          abi: [transferEvent],
+          data: transferLog.data,
+          topics: transferLog.topics,
+        });
+
+        actualReward = formatUnits(decoded.args.value as bigint, 18);
+      }
+    } catch {
+      actualReward = undefined;
+    }
+
+    const item: ClaimHistoryItem = {
+      txHash,
+      wallet: address || "",
+      claimedDay: nextTotalDay,
+      expectedReward: rewardAmt,
+      actualReward,
+      createdAt: new Date().toISOString(),
+    };
+
+    setLastClaim(item);
+
+    if (address) {
+      saveClaimHistory(address, item);
+      setClaimHistory(loadClaimHistory(address));
+    }
+
+    refetchCanClaim();
+    refetchTimeLeft();
+    refetchUserInfo();
+    refetchBalance();
+  }, [
+    isTxSuccess,
+    txHash,
+    txReceipt,
+    address,
+    nextTotalDay,
+    rewardAmt,
+    refetchCanClaim,
+    refetchTimeLeft,
+    refetchUserInfo,
+    refetchBalance,
+  ]);
 
   useEffect(() => {
     if (!writeError) return;
@@ -433,21 +571,7 @@ export default function Home() {
       .finally(() => setRefLoading(false));
   }, [activeTab, address]);
 
-  const totalDays    = userInfoData ? Number(userInfoData[3]) : 0;
-  const totalClaimed = userInfoData ? userInfoData[2] : BigInt(0);
-  const faucetBal    = faucetBalData ?? BigInt(0);
-  const canClaim     = canClaimData ?? false;
-  const isBusy         = isWritePending || isTxLoading;
-  const globalClaims   = totalClaimsData ? Number(totalClaimsData) : 0;
-  const faucetLow = contractReady && faucetBal > 0n && faucetBal < BigInt("100000000000000000000000"); // 100,000 TYSM
   const myRank         = address ? liveLeaderboard.find(e => e.address.toLowerCase() === address.toLowerCase())?.rank : undefined;
-
-  const nextTotalDay  = totalDays + 1;
-  const cycleInfo     = getCycleInfo(nextTotalDay);
-  const rewardAmt     = getDailyReward(nextTotalDay);
-  const isOnMile      = isMilestoneDay(nextTotalDay);
-  const nextM         = getNextMilestone(totalDays);
-  const { pos: cyclePos, pct: cyclePct } = getCycleProgress(totalDays);
 
   const mDays = Math.floor(monthSecs / 86400);
   const mHrs  = Math.floor((monthSecs % 86400) / 3600);
@@ -485,7 +609,7 @@ export default function Home() {
     }
   }, [userCtx, rewardAmt, totalDays, isOnMile]);
 
-    const handleClaim = useCallback(() => {
+  const handleClaim = useCallback(() => {
     setTxError("");
     
     const builderCapabilities = {
@@ -510,7 +634,6 @@ export default function Home() {
       setTxError("Transaction failed. Please try again.");
     }
   }, [writeContract]);
-
 
   const handleEnableNotif = useCallback(async () => {
     try {
@@ -722,8 +845,37 @@ export default function Home() {
                 {txError && (
                   <p className="text-red-400 text-xs mb-2 bg-red-950/30 rounded-lg p-1.5">{txError}</p>
                 )}
-                {isTxSuccess && justClaimed && (
-                  <p className="text-green-400 text-xs mb-2 font-semibold">✅ Claimed! Check your wallet.</p>
+                {isTxSuccess && justClaimed && lastClaim && (
+                  <div className="rounded-xl border border-green-500/30 bg-green-500/10 p-3 text-sm text-green-200 mb-2 text-left">
+                    <div className="font-black">✅ Claim successful</div>
+
+                    <div className="mt-1 text-xs">
+                      Day {lastClaim.claimedDay} · Expected {fmt(lastClaim.expectedReward)} TYSM
+                      {lastClaim.actualReward
+                        ? ` · Paid ${Number(lastClaim.actualReward).toLocaleString("en-US", {
+                            maximumFractionDigits: 0,
+                          })} TYSM`
+                        : ""}
+                    </div>
+
+                    <div className="mt-2 flex gap-2">
+                      <button
+                        className="rounded-lg bg-green-500/20 px-3 py-1 text-xs font-bold"
+                        onClick={() =>
+                          sdk.actions.openUrl(`https://basescan.org/tx/${lastClaim.txHash}`)
+                        }
+                      >
+                        View on BaseScan
+                      </button>
+
+                      <button
+                        className="rounded-lg bg-white/10 px-3 py-1 text-xs font-bold"
+                        onClick={() => navigator.clipboard.writeText(lastClaim.txHash)}
+                      >
+                        Copy Tx
+                      </button>
+                    </div>
+                  </div>
                 )}
                 {!hasShared ? (
                   <div className="space-y-2">
@@ -768,6 +920,49 @@ export default function Home() {
               </div>
             )}
           </div>
+
+          {/* Recent Claims Section */}
+          {claimHistory.length > 0 && (
+            <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4 text-left">
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="text-sm font-black">Recent Claims</h3>
+                <span className="text-[10px] text-gray-400">last 10</span>
+              </div>
+
+              <div className="space-y-2">
+                {claimHistory.map((item) => (
+                  <div
+                    key={item.txHash}
+                    className="flex items-center justify-between rounded-xl bg-black/20 px-3 py-2"
+                  >
+                    <div>
+                      <div className="text-xs font-bold">
+                        Day {item.claimedDay} ·{" "}
+                        {item.actualReward
+                          ? `${Number(item.actualReward).toLocaleString("en-US", {
+                              maximumFractionDigits: 0,
+                            })} TYSM`
+                          : `${fmt(item.expectedReward)} TYSM expected`}
+                      </div>
+
+                      <div className="text-[10px] text-gray-500">
+                        {new Date(item.createdAt).toLocaleString()}
+                      </div>
+                    </div>
+
+                    <button
+                      className="rounded-lg bg-purple-500/20 px-2 py-1 text-[10px] font-bold text-purple-200"
+                      onClick={() =>
+                        sdk.actions.openUrl(`https://basescan.org/tx/${item.txHash}`)
+                      }
+                    >
+                      BaseScan
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
