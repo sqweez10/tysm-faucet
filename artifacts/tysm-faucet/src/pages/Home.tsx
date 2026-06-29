@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 // @ts-ignore
 import sdk from "@farcaster/frame-sdk";
 // @ts-ignore
@@ -11,7 +11,7 @@ import {
 } from "wagmi";
 // @ts-ignore
 import { farcasterFrame } from "@farcaster/frame-wagmi-connector";
-import { formatUnits } from "viem";
+import { formatUnits, parseAbiItem, decodeEventLog } from "viem";
 import { base } from "wagmi/chains";
 
 const FAUCET_ADDRESS = (import.meta.env.VITE_FAUCET_ADDRESS ||
@@ -38,6 +38,41 @@ const FAUCET_ABI = [
 
 const ZERO_ADDR = "0x0000000000000000000000000000000000000000";
 const contractReady = FAUCET_ADDRESS !== ZERO_ADDR;
+
+const TYSM_TOKEN_ADDRESS =
+  "0x0358795322c04de04ead2338a803a9d3518a9877" as `0x${string}`;
+
+type ClaimHistoryItem = {
+  txHash: `0x${string}`;
+  wallet: string;
+  claimedDay: number;
+  expectedReward: number;
+  actualReward?: string;
+  createdAt: string;
+};
+
+function claimHistoryKey(wallet?: string) {
+  return wallet ? `tysm_claim_history_${wallet.toLowerCase()}` : "tysm_claim_history";
+}
+
+function loadClaimHistory(wallet?: string): ClaimHistoryItem[] {
+  if (typeof window === "undefined") return [];
+
+  try {
+    return JSON.parse(localStorage.getItem(claimHistoryKey(wallet)) || "[]");
+  } catch {
+    return [];
+  }
+}
+
+function saveClaimHistory(wallet: string | undefined, item: ClaimHistoryItem) {
+  if (!wallet || typeof window === "undefined") return;
+
+  const prev = loadClaimHistory(wallet);
+  const next = [item, ...prev.filter((x) => x.txHash !== item.txHash)].slice(0, 10);
+
+  localStorage.setItem(claimHistoryKey(wallet), JSON.stringify(next));
+}
 
 const REFERRAL_ADDRESS = (import.meta.env.VITE_REFERRAL_CONTRACT_ADDRESS || ZERO_ADDR) as `0x${string}`;
 const referralReady = REFERRAL_ADDRESS !== ZERO_ADDR;
@@ -214,7 +249,17 @@ export default function Home() {
   const [refLoading,      setRefLoading]      = useState(false);
   const [refCopied,       setRefCopied]       = useState(false);
 
+  const [claimHistory, setClaimHistory] = useState<ClaimHistoryItem[]>([]);
+  const [lastClaim, setLastClaim] = useState<ClaimHistoryItem | null>(null);
+  const processedClaimTxRef = useRef<`0x${string}` | null>(null);
+
   const { address, isConnected } = useAccount();
+
+  useEffect(() => {
+    if (!address) return;
+    setClaimHistory(loadClaimHistory(address));
+  }, [address]);
+
   const { connect } = useConnect();
   const publicClient = usePublicClient();
   const baseQ = { query: { enabled: contractReady && !!address } };
@@ -241,7 +286,11 @@ export default function Home() {
   });
 
   const { writeContract, data: txHash, isPending: isWritePending, error: writeError } = useWriteContract();
-  const { isLoading: isTxLoading, isSuccess: isTxSuccess } = useWaitForTransactionReceipt({ hash: txHash });
+  const {
+    data: txReceipt,
+    isLoading: isTxLoading,
+    isSuccess: isTxSuccess,
+  } = useWaitForTransactionReceipt({ hash: txHash });
 
   const refBaseQ = { query: { enabled: referralReady && !!address } };
   const { data: pendingRefData, refetch: refetchPendingRef } = useReadContract({
@@ -289,12 +338,105 @@ export default function Home() {
     return () => clearInterval(id);
   }, []);
 
+  const totalDays    = userInfoData ? Number(userInfoData[3]) : 0;
+  const totalClaimed = userInfoData ? userInfoData[2] : BigInt(0);
+  const faucetBal    = faucetBalData ?? BigInt(0);
+  const canClaim     = canClaimData ?? false;
+  const isBusy         = isWritePending || isTxLoading;
+  const globalClaims   = totalClaimsData ? Number(totalClaimsData) : 0;
+  const faucetLow = contractReady && faucetBal > 0n && faucetBal < BigInt("100000000000000000000000"); // 100,000 TYSM
+
+  const nextTotalDay  = totalDays + 1;
+  const cycleInfo     = getCycleInfo(nextTotalDay);
+  const rewardAmt     = getDailyReward(nextTotalDay);
+  const isOnMile      = isMilestoneDay(nextTotalDay);
+  const nextM         = getNextMilestone(totalDays);
+  const { pos: cyclePos, pct: cyclePct } = getCycleProgress(totalDays);
+
   useEffect(() => {
-    if (!isTxSuccess) return;
+    if (!isTxSuccess || !txHash) return;
+    if (processedClaimTxRef.current === txHash) return;
+
+    processedClaimTxRef.current = txHash;
+
     setJustClaimed(true);
     setHasShared(false);
-    refetchCanClaim(); refetchTimeLeft(); refetchUserInfo(); refetchBalance();
-  }, [isTxSuccess, refetchCanClaim, refetchTimeLeft, refetchUserInfo, refetchBalance]);
+
+    let actualReward: string | undefined;
+
+    try {
+      const transferEvent = parseAbiItem(
+        "event Transfer(address indexed from, address indexed to, uint256 value)"
+      );
+
+      const transferLog = txReceipt?.logs.find((log) => {
+        if (log.address.toLowerCase() !== TYSM_TOKEN_ADDRESS.toLowerCase()) return false;
+
+        try {
+          const decoded = decodeEventLog({
+            abi: [transferEvent],
+            data: log.data,
+            topics: log.topics,
+          });
+
+          const from = String(decoded.args.from).toLowerCase();
+          const to = String(decoded.args.to).toLowerCase();
+
+          return (
+            from === FAUCET_ADDRESS.toLowerCase() &&
+            !!address &&
+            to === address.toLowerCase()
+          );
+        } catch {
+          return false;
+        }
+      });
+
+      if (transferLog) {
+        const decoded = decodeEventLog({
+          abi: [transferEvent],
+          data: transferLog.data,
+          topics: transferLog.topics,
+        });
+
+        actualReward = formatUnits(decoded.args.value as bigint, 18);
+      }
+    } catch {
+      actualReward = undefined;
+    }
+
+    const item: ClaimHistoryItem = {
+      txHash,
+      wallet: address || "",
+      claimedDay: nextTotalDay,
+      expectedReward: rewardAmt,
+      actualReward,
+      createdAt: new Date().toISOString(),
+    };
+
+    setLastClaim(item);
+
+    if (address) {
+      saveClaimHistory(address, item);
+      setClaimHistory(loadClaimHistory(address));
+    }
+
+    refetchCanClaim();
+    refetchTimeLeft();
+    refetchUserInfo();
+    refetchBalance();
+  }, [
+    isTxSuccess,
+    txHash,
+    txReceipt,
+    address,
+    nextTotalDay,
+    rewardAmt,
+    refetchCanClaim,
+    refetchTimeLeft,
+    refetchUserInfo,
+    refetchBalance,
+  ]);
 
   useEffect(() => {
     if (!writeError) return;
@@ -386,25 +528,21 @@ export default function Home() {
     return () => { cancelled = true; clearInterval(intervalId); };
   }, [activeTab, publicClient, lbRetryKey]);
 
-  // Read ?ref= from URL on mount → save to localStorage
   useEffect(() => {
     try {
       const params = new URLSearchParams(window.location.search);
       const ref = params.get("ref");
-      // Strict validation: must be full 42-char ETH address
       if (ref && /^0x[a-fA-F0-9]{40}$/.test(ref)) {
         localStorage.setItem("tysm_ref", ref.toLowerCase());
       }
     } catch { /* ignore */ }
   }, []);
 
-  // Track referral when wallet connects — cleanup only on confirmed API success
   useEffect(() => {
     if (!address) return;
     try {
       const referrer = localStorage.getItem("tysm_ref");
       if (!referrer || referrer === address.toLowerCase()) return;
-      // Extra safety: re-validate stored address format before sending
       if (!/^0x[a-fA-F0-9]{40}$/.test(referrer)) {
         localStorage.removeItem("tysm_ref");
         return;
@@ -415,14 +553,12 @@ export default function Home() {
         body: JSON.stringify({ referrer, referee: address.toLowerCase() }),
       })
         .then(async (r) => {
-          // Only clear localStorage if server confirmed success or "already tracked"
           if (r.ok) localStorage.removeItem("tysm_ref");
         })
         .catch(() => { /* keep localStorage so it retries on next mount */ });
     } catch { /* ignore */ }
   }, [address]);
 
-  // Fetch referral stats when rewards tab opens
   useEffect(() => {
     if (activeTab !== "rewards" || !address) return;
     setRefLoading(true);
@@ -433,21 +569,7 @@ export default function Home() {
       .finally(() => setRefLoading(false));
   }, [activeTab, address]);
 
-  const totalDays    = userInfoData ? Number(userInfoData[3]) : 0;
-  const totalClaimed = userInfoData ? userInfoData[2] : BigInt(0);
-  const faucetBal    = faucetBalData ?? BigInt(0);
-  const canClaim     = canClaimData ?? false;
-  const isBusy         = isWritePending || isTxLoading;
-  const globalClaims   = totalClaimsData ? Number(totalClaimsData) : 0;
-  const faucetLow = contractReady && faucetBal > 0n && faucetBal < BigInt("100000000000000000000000"); // 100,000 TYSM
   const myRank         = address ? liveLeaderboard.find(e => e.address.toLowerCase() === address.toLowerCase())?.rank : undefined;
-
-  const nextTotalDay  = totalDays + 1;
-  const cycleInfo     = getCycleInfo(nextTotalDay);
-  const rewardAmt     = getDailyReward(nextTotalDay);
-  const isOnMile      = isMilestoneDay(nextTotalDay);
-  const nextM         = getNextMilestone(totalDays);
-  const { pos: cyclePos, pct: cyclePct } = getCycleProgress(totalDays);
 
   const mDays = Math.floor(monthSecs / 86400);
   const mHrs  = Math.floor((monthSecs % 86400) / 3600);
@@ -485,7 +607,7 @@ export default function Home() {
     }
   }, [userCtx, rewardAmt, totalDays, isOnMile]);
 
-    const handleClaim = useCallback(() => {
+  const handleClaim = useCallback(() => {
     setTxError("");
     
     const builderCapabilities = {
@@ -510,7 +632,6 @@ export default function Home() {
       setTxError("Transaction failed. Please try again.");
     }
   }, [writeContract]);
-
 
   const handleEnableNotif = useCallback(async () => {
     try {
@@ -567,7 +688,6 @@ export default function Home() {
         .leaderboard-me{background:linear-gradient(90deg,rgba(245,158,11,0.08),rgba(245,158,11,0.04));border-top:1px solid rgba(245,158,11,0.25)}
       `}</style>
 
-      {/* Tab Navigation */}
       <div className="sticky top-0 z-50 bg-[#0a0a18]/95 backdrop-blur-sm border-b border-white/5">
         <div className="max-w-sm mx-auto flex">
           {(["home", "board", "rewards"] as const).map((tab) => (
@@ -579,10 +699,8 @@ export default function Home() {
         </div>
       </div>
 
-      {/* HOME TAB */}
       {activeTab === "home" && (
         <div className="max-w-sm mx-auto px-4 pt-5 pb-8 space-y-3">
-          {/* Header */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
               {userCtx?.user?.pfpUrl ? (
@@ -609,14 +727,12 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Title */}
           <div className="text-center py-1">
             <div className="text-5xl mb-1" style={{ animation: "float 3s ease-in-out infinite" }}>🙏</div>
             <h1 className="text-5xl font-black leading-none mb-0.5 shimmer-text">$TYSM</h1>
             <p className="text-gray-500 text-[10px] tracking-[0.4em] uppercase">Daily Faucet · by tops87</p>
           </div>
 
-          {/* Cycle Badge Row */}
           <div className="flex items-center justify-center gap-2">
             <CycleBadge cycle={cycleInfo.cycle} />
             <p className="text-gray-500 text-[11px]">
@@ -626,7 +742,6 @@ export default function Home() {
             </p>
           </div>
 
-          {/* Stats row */}
           <div className="grid grid-cols-2 gap-2">
             <div className="bg-white/4 border border-yellow-900/20 rounded-2xl p-3">
               <p className="text-gray-500 text-[9px] uppercase tracking-widest mb-0.5">Faucet Pool</p>
@@ -644,7 +759,6 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Community Stats + Faucet Warning */}
           <div className="flex items-center justify-between bg-white/4 border border-white/8 rounded-xl px-4 py-2">
             <span className="text-gray-500 text-[10px]">🌍 Total Global Claims</span>
             <span className="text-yellow-400 font-black text-sm">
@@ -660,7 +774,6 @@ export default function Home() {
             </div>
           )}
 
-          {/* Cycle Progress Bar */}
           <div className="bg-white/4 border border-yellow-900/20 rounded-2xl p-3.5">
             <div className="flex justify-between items-center mb-2">
               <p className="text-gray-400 text-xs font-medium">
@@ -697,7 +810,6 @@ export default function Home() {
             )}
           </div>
 
-          {/* Main Claim Card */}
           <div className="bg-white/4 border border-yellow-900/20 rounded-2xl p-4 text-center"
             style={{ boxShadow: isOnMile ? "0 0 32px rgba(245,158,11,0.28)" : "0 0 20px rgba(245,158,11,0.08)" }}>
             {!contractReady ? (
@@ -722,8 +834,37 @@ export default function Home() {
                 {txError && (
                   <p className="text-red-400 text-xs mb-2 bg-red-950/30 rounded-lg p-1.5">{txError}</p>
                 )}
-                {isTxSuccess && justClaimed && (
-                  <p className="text-green-400 text-xs mb-2 font-semibold">✅ Claimed! Check your wallet.</p>
+                {isTxSuccess && justClaimed && lastClaim && (
+                  <div className="rounded-xl border border-green-500/30 bg-green-500/10 p-3 text-sm text-green-200 mb-2 text-left">
+                    <div className="font-black">✅ Claim successful</div>
+
+                    <div className="mt-1 text-xs">
+                      Day {lastClaim.claimedDay} · Expected {fmt(lastClaim.expectedReward)} TYSM
+                      {lastClaim.actualReward
+                        ? ` · Paid ${Number(lastClaim.actualReward).toLocaleString("en-US", {
+                            maximumFractionDigits: 0,
+                          })} TYSM`
+                        : ""}
+                    </div>
+
+                    <div className="mt-2 flex gap-2">
+                      <button
+                        className="rounded-lg bg-green-500/20 px-3 py-1 text-xs font-bold"
+                        onClick={() =>
+                          sdk.actions.openUrl(`https://basescan.org/tx/${lastClaim.txHash}`)
+                        }
+                      >
+                        View on BaseScan
+                      </button>
+
+                      <button
+                        className="rounded-lg bg-white/10 px-3 py-1 text-xs font-bold"
+                        onClick={() => navigator.clipboard.writeText(lastClaim.txHash)}
+                      >
+                        Copy Tx
+                      </button>
+                    </div>
+                  </div>
                 )}
                 {!hasShared ? (
                   <div className="space-y-2">
@@ -768,10 +909,51 @@ export default function Home() {
               </div>
             )}
           </div>
+
+          {claimHistory.length > 0 && (
+            <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4 text-left">
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="text-sm font-black">Recent Claims</h3>
+                <span className="text-[10px] text-gray-400">last 10</span>
+              </div>
+
+              <div className="space-y-2">
+                {claimHistory.map((item) => (
+                  <div
+                    key={item.txHash}
+                    className="flex items-center justify-between rounded-xl bg-black/20 px-3 py-2"
+                  >
+                    <div>
+                      <div className="text-xs font-bold">
+                        Day {item.claimedDay} ·{" "}
+                        {item.actualReward
+                          ? `${Number(item.actualReward).toLocaleString("en-US", {
+                              maximumFractionDigits: 0,
+                          })} TYSM`
+                          : `${fmt(item.expectedReward)} TYSM expected`}
+                      </div>
+
+                      <div className="text-[10px] text-gray-500">
+                        {new Date(item.createdAt).toLocaleString()}
+                      </div>
+                    </div>
+
+                    <button
+                      className="rounded-lg bg-purple-500/20 px-2 py-1 text-[10px] font-bold text-purple-200"
+                      onClick={() =>
+                        sdk.actions.openUrl(`https://basescan.org/tx/${item.txHash}`)
+                      }
+                    >
+                      BaseScan
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
-      {/* LEADERBOARD TAB */}
       {activeTab === "board" && (
         <div className="max-w-sm mx-auto px-4 pt-4 pb-24 space-y-4">
           <div className="text-center py-2">
@@ -929,10 +1111,8 @@ export default function Home() {
         </div>
       )}
 
-      {/* REWARDS TAB */}
       {activeTab === "rewards" && (
         <div className="max-w-sm mx-auto px-4 pt-4 pb-8 space-y-4">
-
           {/* Referral Section */}
           {(() => {
             const pendingRefWei  = (pendingRefData as bigint | undefined) ?? BigInt(0);
@@ -941,7 +1121,6 @@ export default function Home() {
             const isClaimBusy    = isRefClaimPending || isRefClaimLoading;
             return (
               <div className="bg-white/4 border border-purple-700/30 rounded-2xl p-4 space-y-3">
-                {/* Header row */}
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-purple-300 font-black text-sm">🔗 Invite Friends</p>
@@ -957,7 +1136,6 @@ export default function Home() {
 
                 {isConnected && address ? (
                   <>
-                    {/* Referral link */}
                     <div className="bg-black/30 border border-white/8 rounded-xl px-3 py-2 flex items-center gap-2">
                       <p className="text-gray-400 text-[10px] flex-1 truncate font-mono">
                         {APP_URL}?ref={address.slice(0, 8)}…
@@ -973,7 +1151,6 @@ export default function Home() {
                       </button>
                     </div>
 
-                    {/* Reward tiers */}
                     <div className="grid grid-cols-3 gap-1.5 text-center">
                       {[
                         { range: "1–5",  reward: "5K",  color: "#a78bfa" },
@@ -987,7 +1164,6 @@ export default function Home() {
                       ))}
                     </div>
 
-                    {/* Pending rewards + claim */}
                     {referralReady && (
                       <div className="flex items-center justify-between bg-black/20 border border-purple-800/30 rounded-xl px-3 py-2.5">
                         <div>
@@ -1056,8 +1232,6 @@ export default function Home() {
           <div>
             <h3 className="text-center text-xs font-black text-gray-400 uppercase tracking-widest mb-3">Daily Reward Structure</h3>
             <div className="space-y-3">
-
-              {/* Cycle 1 */}
               <div className="bg-white/4 border border-yellow-500/25 rounded-2xl overflow-hidden">
                 <div className="bg-yellow-500/10 px-3 py-2.5 flex items-center justify-between">
                   <span className="text-yellow-400 font-black text-xs">🥉 Cycle 1 · Days 1–30</span>
@@ -1078,7 +1252,6 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* Cycle 2 */}
               <div className="bg-white/4 border border-gray-400/25 rounded-2xl overflow-hidden">
                 <div className="bg-gray-400/10 px-3 py-2.5 flex items-center justify-between">
                   <span className="text-gray-300 font-black text-xs">🥈 Cycle 2 · Days 31–60</span>
@@ -1099,7 +1272,6 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* Cycle 3 */}
               <div className="bg-white/4 border border-purple-400/25 rounded-2xl overflow-hidden">
                 <div className="bg-purple-400/10 px-3 py-2.5 flex items-center justify-between">
                   <span className="text-purple-300 font-black text-xs">🥇👑 Cycle 3 · Days 61+</span>
@@ -1119,15 +1291,12 @@ export default function Home() {
                   ))}
                 </div>
               </div>
-
             </div>
             <p className="text-gray-700 text-[9px] text-center mt-3">Infinite progression · No resets · Keep claiming every day!</p>
           </div>
-
         </div>
       )}
 
-      {/* Frozen "Your Status" row at bottom of leaderboard */}
       {activeTab === "board" && (
         <div className="fixed bottom-0 left-0 right-0 z-50 leaderboard-me px-4 py-2.5 backdrop-blur-sm">
           <div className="max-w-sm mx-auto grid grid-cols-12 gap-1 items-center">
