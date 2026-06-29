@@ -1,6 +1,5 @@
 "use client";
 
-// [จุดแก้ไขที่ 1] เพิ่มการ import useRef เข้ามาใช้งาน
 import { useEffect, useState, useCallback, useRef } from "react";
 // @ts-ignore
 import sdk from "@farcaster/frame-sdk";
@@ -250,7 +249,6 @@ export default function Home() {
   const [refLoading,      setRefLoading]      = useState(false);
   const [refCopied,       setRefCopied]       = useState(false);
 
-  // [จุดแก้ไขที่ 2] อัปเดตการพิมพ์ของ useState และสร้าง processedClaimTxRef บล็อกธุรกรรมซ้ำ
   const [claimHistory, setClaimHistory] = useState<ClaimHistoryItem[]>([]);
   const [lastClaim, setLastClaim] = useState<ClaimHistoryItem | null>(null);
   const processedClaimTxRef = useRef<`0x${string}` | null>(null);
@@ -355,7 +353,6 @@ export default function Home() {
   const nextM         = getNextMilestone(totalDays);
   const { pos: cyclePos, pct: cyclePct } = getCycleProgress(totalDays);
 
-  // [จุดแก้ไขที่ 3] ตรวจสอบ txHash ผ่าน useRef ป้องกันการบันทึกประวัติซ้ำซ้อน
   useEffect(() => {
     if (!isTxSuccess || !txHash) return;
     if (processedClaimTxRef.current === txHash) return;
@@ -531,7 +528,6 @@ export default function Home() {
     return () => { cancelled = true; clearInterval(intervalId); };
   }, [activeTab, publicClient, lbRetryKey]);
 
-  // Read ?ref= from URL on mount → save to localStorage
   useEffect(() => {
     try {
       const params = new URLSearchParams(window.location.search);
@@ -542,7 +538,6 @@ export default function Home() {
     } catch { /* ignore */ }
   }, []);
 
-  // Track referral when wallet connects — cleanup only on confirmed API success
   useEffect(() => {
     if (!address) return;
     try {
@@ -564,7 +559,6 @@ export default function Home() {
     } catch { /* ignore */ }
   }, [address]);
 
-  // Fetch referral stats when rewards tab opens
   useEffect(() => {
     if (activeTab !== "rewards" || !address) return;
     setRefLoading(true);
@@ -694,7 +688,6 @@ export default function Home() {
         .leaderboard-me{background:linear-gradient(90deg,rgba(245,158,11,0.08),rgba(245,158,11,0.04));border-top:1px solid rgba(245,158,11,0.25)}
       `}</style>
 
-      {/* Tab Navigation */}
       <div className="sticky top-0 z-50 bg-[#0a0a18]/95 backdrop-blur-sm border-b border-white/5">
         <div className="max-w-sm mx-auto flex">
           {(["home", "board", "rewards"] as const).map((tab) => (
@@ -706,10 +699,8 @@ export default function Home() {
         </div>
       </div>
 
-      {/* HOME TAB */}
       {activeTab === "home" && (
         <div className="max-w-sm mx-auto px-4 pt-5 pb-8 space-y-3">
-          {/* Header */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
               {userCtx?.user?.pfpUrl ? (
@@ -736,14 +727,12 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Title */}
           <div className="text-center py-1">
             <div className="text-5xl mb-1" style={{ animation: "float 3s ease-in-out infinite" }}>🙏</div>
             <h1 className="text-5xl font-black leading-none mb-0.5 shimmer-text">$TYSM</h1>
             <p className="text-gray-500 text-[10px] tracking-[0.4em] uppercase">Daily Faucet · by tops87</p>
           </div>
 
-          {/* Cycle Badge Row */}
           <div className="flex items-center justify-center gap-2">
             <CycleBadge cycle={cycleInfo.cycle} />
             <p className="text-gray-500 text-[11px]">
@@ -753,7 +742,6 @@ export default function Home() {
             </p>
           </div>
 
-          {/* Stats row */}
           <div className="grid grid-cols-2 gap-2">
             <div className="bg-white/4 border border-yellow-900/20 rounded-2xl p-3">
               <p className="text-gray-500 text-[9px] uppercase tracking-widest mb-0.5">Faucet Pool</p>
@@ -771,7 +759,6 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Community Stats + Faucet Warning */}
           <div className="flex items-center justify-between bg-white/4 border border-white/8 rounded-xl px-4 py-2">
             <span className="text-gray-500 text-[10px]">🌍 Total Global Claims</span>
             <span className="text-yellow-400 font-black text-sm">
@@ -787,7 +774,6 @@ export default function Home() {
             </div>
           )}
 
-          {/* Cycle Progress Bar */}
           <div className="bg-white/4 border border-yellow-900/20 rounded-2xl p-3.5">
             <div className="flex justify-between items-center mb-2">
               <p className="text-gray-400 text-xs font-medium">
@@ -824,7 +810,6 @@ export default function Home() {
             )}
           </div>
 
-          {/* Main Claim Card */}
           <div className="bg-white/4 border border-yellow-900/20 rounded-2xl p-4 text-center"
             style={{ boxShadow: isOnMile ? "0 0 32px rgba(245,158,11,0.28)" : "0 0 20px rgba(245,158,11,0.08)" }}>
             {!contractReady ? (
@@ -925,7 +910,6 @@ export default function Home() {
             )}
           </div>
 
-          {/* Recent Claims Section */}
           {claimHistory.length > 0 && (
             <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4 text-left">
               <div className="mb-3 flex items-center justify-between">
@@ -970,7 +954,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* LEADERBOARD TAB */}
       {activeTab === "board" && (
         <div className="max-w-sm mx-auto px-4 pt-4 pb-24 space-y-4">
           <div className="text-center py-2">
@@ -1128,10 +1111,8 @@ export default function Home() {
         </div>
       )}
 
-      {/* REWARDS TAB */}
       {activeTab === "rewards" && (
         <div className="max-w-sm mx-auto px-4 pt-4 pb-8 space-y-4">
-
           {/* Referral Section */}
           {(() => {
             const pendingRefWei  = (pendingRefData as bigint | undefined) ?? BigInt(0);
@@ -1140,7 +1121,6 @@ export default function Home() {
             const isClaimBusy    = isRefClaimPending || isRefClaimLoading;
             return (
               <div className="bg-white/4 border border-purple-700/30 rounded-2xl p-4 space-y-3">
-                {/* Header row */}
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-purple-300 font-black text-sm">🔗 Invite Friends</p>
@@ -1156,7 +1136,6 @@ export default function Home() {
 
                 {isConnected && address ? (
                   <>
-                    {/* Referral link */}
                     <div className="bg-black/30 border border-white/8 rounded-xl px-3 py-2 flex items-center gap-2">
                       <p className="text-gray-400 text-[10px] flex-1 truncate font-mono">
                         {APP_URL}?ref={address.slice(0, 8)}…
@@ -1172,7 +1151,6 @@ export default function Home() {
                       </button>
                     </div>
 
-                    {/* Reward tiers */}
                     <div className="grid grid-cols-3 gap-1.5 text-center">
                       {[
                         { range: "1–5",  reward: "5K",  color: "#a78bfa" },
@@ -1186,7 +1164,6 @@ export default function Home() {
                       ))}
                     </div>
 
-                    {/* Pending rewards + claim */}
                     {referralReady && (
                       <div className="flex items-center justify-between bg-black/20 border border-purple-800/30 rounded-xl px-3 py-2.5">
                         <div>
@@ -1255,8 +1232,6 @@ export default function Home() {
           <div>
             <h3 className="text-center text-xs font-black text-gray-400 uppercase tracking-widest mb-3">Daily Reward Structure</h3>
             <div className="space-y-3">
-
-              {/* Cycle 1 */}
               <div className="bg-white/4 border border-yellow-500/25 rounded-2xl overflow-hidden">
                 <div className="bg-yellow-500/10 px-3 py-2.5 flex items-center justify-between">
                   <span className="text-yellow-400 font-black text-xs">🥉 Cycle 1 · Days 1–30</span>
@@ -1277,7 +1252,6 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* Cycle 2 */}
               <div className="bg-white/4 border border-gray-400/25 rounded-2xl overflow-hidden">
                 <div className="bg-gray-400/10 px-3 py-2.5 flex items-center justify-between">
                   <span className="text-gray-300 font-black text-xs">🥈 Cycle 2 · Days 31–60</span>
@@ -1298,7 +1272,6 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* Cycle 3 */}
               <div className="bg-white/4 border border-purple-400/25 rounded-2xl overflow-hidden">
                 <div className="bg-purple-400/10 px-3 py-2.5 flex items-center justify-between">
                   <span className="text-purple-300 font-black text-xs">🥇👑 Cycle 3 · Days 61+</span>
@@ -1318,15 +1291,12 @@ export default function Home() {
                   ))}
                 </div>
               </div>
-
             </div>
             <p className="text-gray-700 text-[9px] text-center mt-3">Infinite progression · No resets · Keep claiming every day!</p>
           </div>
-
         </div>
       )}
 
-      {/* Frozen "Your Status" row at bottom of leaderboard */}
       {activeTab === "board" && (
         <div className="fixed bottom-0 left-0 right-0 z-50 leaderboard-me px-4 py-2.5 backdrop-blur-sm">
           <div className="max-w-sm mx-auto grid grid-cols-12 gap-1 items-center">
