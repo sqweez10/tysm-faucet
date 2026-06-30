@@ -468,7 +468,7 @@ export default function Home() {
             if (from && tx.status === "ok" && !seen.has(from)) {
               seen.add(from);
               addresses.push(tx.from.hash as `0x${string}`);
-              if (addresses.length >= 50) break;
+              if (addresses.length >= 100) break;
             }
           }
         }
