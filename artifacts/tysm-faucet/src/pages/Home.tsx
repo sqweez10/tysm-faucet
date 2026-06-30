@@ -494,7 +494,7 @@ export default function Home() {
           })
           .filter((x): x is NonNullable<typeof x> => x !== null)
           .sort((a, b) => b.totalDays - a.totalDays)
-          .slice(0, 50)
+          .slice(0, 100)
           .map((e, i) => ({ ...e, rank: i + 1 }));
 
         const resolveUsers = async (entries: typeof rawBoard): Promise<LeaderboardEntry[]> => {
