@@ -5,6 +5,7 @@ import referralTrackRouter from "./referral-track";
 import referralStatsRouter from "./referral-stats";
 import resolveUsersRouter from "./resolve-users";
 import webhookRouter from "./webhook";
+import fidWalletRouter from "./fid-wallet";
 
 const router: IRouter = Router();
 
@@ -14,5 +15,6 @@ router.use(referralTrackRouter);
 router.use(referralStatsRouter);
 router.use(resolveUsersRouter);
 router.use(webhookRouter);
+router.use(fidWalletRouter);
 
 export default router;

@@ -249,6 +249,12 @@ export default function Home() {
   const [refLoading,      setRefLoading]      = useState(false);
   const [refCopied,       setRefCopied]       = useState(false);
 
+    // UX-only: warns if the connected wallet differs from the last wallet seen
+    // for this Farcaster FID. Purely informational — never affects claim
+    // eligibility, cooldown, or countdown, which always read the on-chain
+    // contract with the currently connected wagmi address.
+    const [fidWalletMismatch, setFidWalletMismatch] = useState<string | null>(null);
+
   const [claimHistory, setClaimHistory] = useState<ClaimHistoryItem[]>([]);
   const [lastClaim, setLastClaim] = useState<ClaimHistoryItem | null>(null);
   const processedClaimTxRef = useRef<`0x${string}` | null>(null);
@@ -654,6 +660,49 @@ export default function Home() {
     setTimeout(() => setRefCopied(false), 2500);
   }, [address]);
 
+    // UX-only: FID <-> wallet helper mapping. Never used for claim eligibility,
+    // cooldown, or countdown — those always come from the contract reads above,
+    // keyed by the currently connected wagmi `address`. This effect only:
+    //   1) looks up the last wallet seen for this FID, to show an informational
+    //      banner if it differs from the wallet connected right now
+    //   2) records the current (fid, wallet) pair for next time
+    // Any failure here (network, Redis down) is swallowed silently — the app
+    // must keep working normally regardless.
+    useEffect(() => {
+      const fid = userCtx?.user?.fid;
+      if (!address || !fid || !Number.isInteger(fid) || fid <= 0) {
+        setFidWalletMismatch(null);
+        return;
+      }
+
+      const currentWallet = address.toLowerCase();
+      let cancelled = false;
+
+      fetch(`/api/fid-wallet?fid=${encodeURIComponent(fid)}`)
+        .then(r => (r.ok ? r.json() : null))
+        .then((d: { wallet?: string | null } | null) => {
+          if (cancelled || !d) return;
+          const lastWallet = d.wallet ? d.wallet.toLowerCase() : null;
+          if (lastWallet && lastWallet !== currentWallet) {
+            setFidWalletMismatch(lastWallet);
+          } else {
+            setFidWalletMismatch(null);
+          }
+        })
+        .catch(() => { /* fail soft — never block the UI */ })
+        .finally(() => {
+          // Best-effort: record current pairing. Only fires once we have a
+          // valid fid AND a valid connected address (constraint #8).
+          fetch("/api/fid-wallet", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ fid, wallet: currentWallet }),
+          }).catch(() => { /* fail soft */ });
+        });
+
+      return () => { cancelled = true; };
+    }, [address, userCtx?.user?.fid]);
+
   if (!sdkReady) {
     return (
       <div className="min-h-screen bg-[#0d0d1a] flex flex-col items-center justify-center gap-4">
@@ -726,6 +775,17 @@ export default function Home() {
               <HeartBadge hearts={hearts} />
             </div>
           </div>
+
+            {/* Informational only — never affects claim eligibility/cooldown/countdown */}
+            {fidWalletMismatch && (
+              <div className="bg-amber-900/20 border border-amber-700/30 rounded-xl px-3 py-2 flex items-start gap-2">
+                <span className="text-sm leading-none mt-0.5">⚠️</span>
+                <p className="text-amber-300/90 text-[10.5px] leading-snug">
+                  You last claimed with a different wallet ({fidWalletMismatch.slice(0, 6)}...{fidWalletMismatch.slice(-4)}).
+                  Streak and cooldown always follow the wallet you're connected with now.
+                </p>
+              </div>
+            )}
 
           <div className="text-center py-1">
             <div className="text-5xl mb-1" style={{ animation: "float 3s ease-in-out infinite" }}>🙏</div>
