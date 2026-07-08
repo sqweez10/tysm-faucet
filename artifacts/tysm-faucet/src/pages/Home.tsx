@@ -781,7 +781,7 @@ export default function Home() {
               <div className="bg-amber-900/20 border border-amber-700/30 rounded-xl px-3 py-2 flex items-start gap-2">
                 <span className="text-sm leading-none mt-0.5">⚠️</span>
                 <p className="text-amber-300/90 text-[10.5px] leading-snug">
-                  You last claimed with a different wallet ({fidWalletMismatch.slice(0, 6)}...{fidWalletMismatch.slice(-4)}).
+                  You previously connected a different wallet ({fidWalletMismatch.slice(0, 6)}...{fidWalletMismatch.slice(-4)}).
                   Streak and cooldown always follow the wallet you're connected with now.
                 </p>
               </div>
