@@ -132,7 +132,7 @@ function getCycleInfo(totalDays: number): CycleInfo {
     };
   } else if (totalDays <= 60) {
     return {
-      cycle: 2, cycleDay: totalDays - 30, baseRate: 5000,
+      cycle: 2, cycleDay: totalDays - 30, baseRate: 2000,
       cycleLabel: "Cycle 2",
       milestones: [
         { day: 37, reward: 20000,  cycleDay: 7  },
@@ -142,7 +142,7 @@ function getCycleInfo(totalDays: number): CycleInfo {
     };
   } else {
     return {
-      cycle: 3, cycleDay: totalDays - 60, baseRate: 10000,
+      cycle: 3, cycleDay: totalDays - 60, baseRate: 2000,
       cycleLabel: "Cycle 3+",
       milestones: [
         { day: 67, reward: 20000,  cycleDay: 7  },
@@ -797,8 +797,8 @@ export default function Home() {
             <CycleBadge cycle={cycleInfo.cycle} />
             <p className="text-gray-500 text-[11px]">
               {cycleInfo.cycle === 1 ? "Base: 2,000 $TYSM/day"
-              : cycleInfo.cycle === 2 ? "Upgraded: 5,000 $TYSM/day"
-              : "Elite: 10,000 $TYSM/day"}
+              : cycleInfo.cycle === 2 ? "Cycle 2: Daily 2,000 + bigger milestone bonuses"
+              : "Cycle 3+: Daily 2,000 + elite milestone bonuses"}
             </p>
           </div>
 
@@ -1315,7 +1315,7 @@ export default function Home() {
               <div className="bg-white/4 border border-gray-400/25 rounded-2xl overflow-hidden">
                 <div className="bg-gray-400/10 px-3 py-2.5 flex items-center justify-between">
                   <span className="text-gray-300 font-black text-xs">🥈 Cycle 2 · Days 31–60</span>
-                  <span className="text-emerald-300 font-bold text-xs">5,000 / day</span>
+                  <span className="text-emerald-300 font-bold text-xs">2,000 / day</span>
                 </div>
                 <div className="divide-y divide-white/5">
                   {[
@@ -1335,7 +1335,7 @@ export default function Home() {
               <div className="bg-white/4 border border-purple-400/25 rounded-2xl overflow-hidden">
                 <div className="bg-purple-400/10 px-3 py-2.5 flex items-center justify-between">
                   <span className="text-purple-300 font-black text-xs">🥇👑 Cycle 3 · Days 61+</span>
-                  <span className="text-purple-300 font-bold text-xs">10,000 / day</span>
+                  <span className="text-purple-300 font-bold text-xs">2,000 / day</span>
                 </div>
                 <div className="divide-y divide-white/5">
                   {[
