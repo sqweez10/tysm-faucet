@@ -1,55 +1,63 @@
-### ⚡ TYSM Daily Faucet Mini-App (Updated)
+### ⚡ TYSM Daily Faucet Mini-App
 
-A gamified Web3 SocialFi Mini-App built for the Farcaster ecosystem, deployed on the Base network. This application incentivizes community engagement through a structured daily token distribution l[...]
+  A gamified Web3 SocialFi Mini-App built for the Farcaster ecosystem, deployed on the Base network. Users claim free $TYSM tokens once every 24 hours, with milestone bonuses for loyalty streaks.
 
-## 🚀 Key Features
+  ## 🚀 Key Features
 
-* **⚡ Share-to-Unlock:** Users must share (Cast) their current streak status to the Farcaster network before unlocking the on-chain claim action, ensuring a 100% viral loop.
-* **🎯 Infinite Progress Bar & Milestones:** Visual indicator tracking the user's total continuous streak counter, which grows infinitely and never resets back to Day 1 after reaching 30 days.
-* **🎁 Multi-Cycle Milestone Badges:** Special visual rewards and multi-tier badges unlocked on major reward milestones across multiple continuous loyalty cycles (Days 7, 15, 30, 37, 45, 60, 67, [...])
-* **⏳ Countdown Timer:** Keeps users motivated by showing exactly how many days remain until the next major reward tier.
+  * **⚡ Share-to-Unlock:** Users must share (Cast) their current streak status to Farcaster before unlocking the on-chain claim, creating a 100% viral loop.
+  * **🎯 Progress Tracking:** Visual progress bar showing position within the current 30-day cycle.
+  * **⏳ Countdown Timer:** Shows exactly how long until the next claim is available.
+  * **🏆 Leaderboard:** Live rankings by total claim days.
 
-## 📊 Gamified Reward Structure (Infinite Milestone Loops)
+  ## 📊 On-Chain Daily Faucet Reward Structure
 
-The faucet utilizes an advanced Infinite Progression System where the distribution tier and base claim rate scale dynamically based on the total accumulated days. This structures rewards across mu[...]
+  The faucet uses a **repeating 30-day cycle**. After Day 30, the cycle starts again from Day 1.
+  `totalDays` is the lifetime claim count and never resets. The cycle position (streak) resets every 30 days.
 
-| Day Period | Daily Reward Amount | Notes |
-| :--- | :--- | :--- |
-| **Days 1 - 6** | 2,000 $TYSM / day | Cycle 1: Base Streak Setup |
-| **Day 7** | 2,000 $TYSM | **Milestone Bonus 1** 🥉 (+10,000 $TYSM) |
-| **Days 8 - 14** | 2,000 $TYSM / day | Cycle 1: Mid-Cycle Retention |
-| **Day 15** | 2,000 $TYSM | **Milestone Bonus 2** 🥈 (+40,000 $TYSM) |
-| **Days 16 - 29** | 2,000 $TYSM / day | Cycle 1: Late-Cycle Engagement |
-| **Day 30** | 2,000 $TYSM | **Ultimate Milestone** 🥇👑 (+90,000 $TYSM) |
-| **Day 31+** | *Progression* | **Upgrades to Cycle 2** (No Reset to Day 1) |
+  | Day in Cycle | Daily Reward | Notes |
+  | :--- | :--- | :--- |
+  | Days 1–6 | 2,000 $TYSM | Base daily claim |
+  | **Day 7** | **10,000 $TYSM** | 🔥 Week 1 Milestone |
+  | Days 8–14 | 2,000 $TYSM | Base daily claim |
+  | **Day 15** | **40,000 $TYSM** | 🌟 Mid-Month Milestone |
+  | Days 16–29 | 2,000 $TYSM | Base daily claim |
+  | **Day 30** | **90,000 $TYSM** | 👑 Full Month Milestone |
+  | Day 31+ | 2,000 $TYSM/day | Cycle repeats from Day 1 |
 
----
+  > All rewards above are paid by the on-chain faucet contract. The base daily rate is **2,000 $TYSM** across all cycles.
 
-### 🔄 Advanced Cycle Progression Details
+  ---
 
-#### 🔹 Cycle 2: Days 31 to 60 (2x Milestone Boost)
-* **Daily Base Claim Rate:** Permanently upgrades to **5,000 $TYSM / day**
-* **Milestones (2x Rewards compared to Cycle 1):**
-  * **Day 37:** **20,000 $TYSM** *(Day 7 × 2)* 🔥
-  * **Day 45:** **80,000 $TYSM** *(Day 15 × 2)* 🔥
-  * **Day 60:** **180,000 $TYSM** *(Day 30 × 2)* 🚀
+  ## 🎁 Planned: Special Loyalty Bonus Pool
 
-#### 🔹 Cycle 3: Days 61+ (Max Tier Progression)
-* **Daily Base Claim Rate:** Automatically upgrades to **10,000 $TYSM / day**
-* **Milestones (Maintains high-tier retention):**
-  * **Day 67:** **20,000 $TYSM** ✨
-  * **Day 75:** **80,000 $TYSM** ✨
-  * **Day 90:** **180,000 $TYSM** 👑
-* **Day 91+:** Infinite loop continues at the maximum base rate of **10,000 $TYSM / day**
+  Special Loyalty Bonuses for long-term users are planned as a **separate bonus pool**, not part of the daily faucet contract.
 
-## 🛠️ Tech Stack
+  | Milestone | Bonus | Notes |
+  | :--- | :--- | :--- |
+  | C2 — Day 45 (lifetime) | 80,000 $TYSM | One-time · Retroactive |
+  | C2 — Day 60 (lifetime) | 180,000 $TYSM | One-time · Retroactive |
+  | C3 / C4 phases | TBD | Planned later |
 
-* **Framework:** Next.js (App Router)
-* **Language:** TypeScript
-* **SDK:** `@farcaster/miniapp-sdk`
-* **Styling:** Tailwind CSS
-* **Deployment:** Vercel
-* **Blockchain:** Base Network (Ethereum L2)
+  **Important details:**
+  - Each bonus milestone can be claimed **only once**.
+  - If a user reaches Day 60 without claiming Day 45, they can still claim both unlocked bonuses later.
+  - Bonus claims are **separate** from the daily faucet claim.
+  - Special Bonus claims may include a fixed support fee of **0.0000038 ETH** (separate from Base network gas).
+  - Network gas goes to Base. The support fee helps refill the TYSM bonus pool.
 
----
-Developed with 🔥 by **tops87sqweezz.base.eth**
+  > C3/C4 phases are planned as future bonus pool phases. Milestones and dates TBD.
+
+  ---
+
+  ## 🛠️ Tech Stack
+
+  * **Framework:** React + Vite
+  * **Language:** TypeScript
+  * **SDK:** `@farcaster/frame-sdk`, `@farcaster/miniapp-sdk`
+  * **Styling:** Tailwind CSS v4
+  * **Blockchain:** Base Network (Ethereum L2) · wagmi v2 + viem
+  * **Deployment:** Vercel / Replit
+
+  ---
+  Developed with 🔥 by **tops87sqweezz.base.eth**
+  

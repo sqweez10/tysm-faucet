@@ -1294,7 +1294,7 @@ export default function Home() {
             <div className="space-y-3">
               <div className="bg-white/4 border border-yellow-500/25 rounded-2xl overflow-hidden">
                 <div className="bg-yellow-500/10 px-3 py-2.5 flex items-center justify-between">
-                  <span className="text-yellow-400 font-black text-xs">🥉 Cycle 1 · Days 1–30</span>
+                  <span className="text-yellow-400 font-black text-xs">🥉 Daily Faucet · 30-Day Cycle (Repeats)</span>
                   <span className="text-yellow-300 font-bold text-xs">2,000 / day</span>
                 </div>
                 <div className="divide-y divide-white/5">
@@ -1310,49 +1310,36 @@ export default function Home() {
                     </div>
                   ))}
                 </div>
-              </div>
-
-              <div className="bg-white/4 border border-gray-400/25 rounded-2xl overflow-hidden">
-                <div className="bg-gray-400/10 px-3 py-2.5 flex items-center justify-between">
-                  <span className="text-gray-300 font-black text-xs">🥈 Cycle 2 · Days 31–60</span>
-                  <span className="text-emerald-300 font-bold text-xs">2,000 / day</span>
-                </div>
-                <div className="divide-y divide-white/5">
-                  {[
-                    { day: 37, label: "🔥 Week 1",     bonus: "+20K"  },
-                    { day: 45, label: "🌟 Mid Month",  bonus: "+80K"  },
-                    { day: 60, label: "👑 Full Month",  bonus: "+180K" },
-                  ].map(m => (
-                    <div key={m.day} className="grid grid-cols-3 px-3 py-2 text-[11px]">
-                      <span className="text-gray-500">Day {m.day}</span>
-                      <span className="text-gray-300 text-center">{m.label}</span>
-                      <span className="text-green-400 font-bold text-right">{m.bonus}</span>
+              </di<div className="bg-white/4 border border-emerald-500/25 rounded-2xl overflow-hidden">
+                  <div className="bg-emerald-500/10 px-3 py-2.5 flex items-center justify-between">
+                    <span className="text-emerald-300 font-black text-xs">🎁 Special Loyalty Bonus Pool · Planned</span>
+                    <span className="text-emerald-400 font-bold text-xs">One-time · Separate</span>
+                  </div>
+                  <div className="divide-y divide-white/5">
+                    {[
+                      { day: 45, label: "🌟 C2 Bonus",  bonus: "+80K"  },
+                      { day: 60, label: "👑 C2 Bonus",  bonus: "+180K" },
+                    ].map(m => (
+                      <div key={m.day} className="grid grid-cols-3 px-3 py-2 text-[11px]">
+                        <span className="text-gray-500">Day {m.day}</span>
+                        <span className="text-gray-300 text-center">{m.label}</span>
+                        <span className="text-green-400 font-bold text-right">{m.bonus}</span>
+                      </div>
+                    ))}
+                    <div className="px-3 py-2">
+                      <p className="text-gray-600 text-[9.5px] leading-snug">Not paid by the daily faucet contract · Each milestone claimed once · Retroactive if missed · May include 0.0000038 ETH support fee (separate from Base gas)</p>
                     </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="bg-white/4 border border-purple-400/25 rounded-2xl overflow-hidden">
-                <div className="bg-purple-400/10 px-3 py-2.5 flex items-center justify-between">
-                  <span className="text-purple-300 font-black text-xs">🥇👑 Cycle 3 · Days 61+</span>
-                  <span className="text-purple-300 font-bold text-xs">2,000 / day</span>
-                </div>
-                <div className="divide-y divide-white/5">
-                  {[
-                    { day: 67, label: "🔥 Week 1",     bonus: "+20K"  },
-                    { day: 75, label: "🌟 Mid Month",  bonus: "+80K"  },
-                    { day: 90, label: "👑 Full Month",  bonus: "+180K" },
-                  ].map(m => (
-                    <div key={m.day} className="grid grid-cols-3 px-3 py-2 text-[11px]">
-                      <span className="text-gray-500">Day {m.day}</span>
-                      <span className="text-gray-300 text-center">{m.label}</span>
-                      <span className="text-green-400 font-bold text-right">{m.bonus}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-            <p className="text-gray-700 text-[9px] text-center mt-3">Infinite progression · No resets · Keep claiming every day!</p>
+                  </div>
+                </div>            </di<div className="bg-white/4 border border-purple-400/25 rounded-2xl overflow-hidden">
+                  <div className="bg-purple-400/10 px-3 py-2.5 flex items-center justify-between">
+                    <span className="text-purple-300 font-black text-xs">✨ C3 / C4 Phases · Coming Later</span>
+                    <span className="text-purple-400 font-bold text-xs">Planned</span>
+                  </div>
+                  <div className="px-3 py-3">
+                    <p className="text-gray-600 text-[9.5px] leading-snug text-center">Future Special Loyalty Bonus phases for long-term claimers · Milestones and dates TBD · Support fee may apply</p>
+                  </div>
+                </div>            </div>
+            <p className="text-gray-700 text-[9px] text-center mt-3">Daily faucet cycle repeats every 30 days · Special Loyalty Bonuses are separate one-time claims</p>
           </div>
         </div>
       )}
