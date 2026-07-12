@@ -34,8 +34,8 @@
 
   | Milestone | Bonus | Notes |
   | :--- | :--- | :--- |
-  | C2 — Day 45 (lifetime) | 80,000 $TYSM | One-time · Retroactive |
-  | C2 — Day 60 (lifetime) | 180,000 $TYSM | One-time · Retroactive |
+  | C2 — Day 45 (lifetime) | 80,000 $TYSM | One-time · Claimable later if unlocked |
+  | C2 — Day 60 (lifetime) | 180,000 $TYSM | One-time · Claimable later if unlocked |
   | C3 / C4 phases | TBD | Planned later |
 
   **Important details:**

@@ -1327,7 +1327,7 @@ export default function Home() {
                       </div>
                     ))}
                     <div className="px-3 py-2">
-                      <p className="text-gray-600 text-[9.5px] leading-snug">Not paid by the daily faucet contract · Each milestone claimed once · Retroactive if missed · May include 0.0000038 ETH support fee (separate from Base gas)</p>
+                      <p className="text-gray-600 text-[9.5px] leading-snug">Not paid by the daily faucet contract · Each milestone claimed once · Unlocked bonuses can be claimed later if missed · May include 0.0000038 ETH support fee (separate from Base gas)</p>
                     </div>
                   </div>
                 </div>            </di<div className="bg-white/4 border border-purple-400/25 rounded-2xl overflow-hidden">
