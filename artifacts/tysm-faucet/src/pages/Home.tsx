@@ -1330,15 +1330,19 @@ export default function Home() {
                       <p className="text-gray-600 text-[9.5px] leading-snug">Not paid by the daily faucet contract · Each milestone claimed once · Unlocked bonuses can be claimed later if missed · May include 0.0000038 ETH support fee (separate from Base gas)</p>
                     </div>
                   </div>
-                </div>            </di<div className="bg-white/4 border border-purple-400/25 rounded-2xl overflow-hidden">
-                  <div className="bg-purple-400/10 px-3 py-2.5 flex items-center justify-between">
-                    <span className="text-purple-300 font-black text-xs">✨ C3 / C4 Phases · Coming Later</span>
-                    <span className="text-purple-400 font-bold text-xs">Planned</span>
-                  </div>
-                  <div className="px-3 py-3">
-                    <p className="text-gray-600 text-[9.5px] leading-snug text-center">Future Special Loyalty Bonus phases for long-term claimers · Milestones and dates TBD · Support fee may apply</p>
-                  </div>
-                </div>            </div>
+                <[/div](https://farcaster.xyz/~/channel/div)>
+<div className="bg-white/4 border border-purple-400/25 rounded-2xl overflow-hidden">
+  <div className="bg-purple-400/10 px-3 py-2.5 flex items-center justify-between">
+    <span className="text-purple-300 font-black text-xs">✨ C3 / C4 Phases · Coming Later<[/span](https://farcaster.xyz/~/channel/span)>
+    <span className="text-purple-400 font-bold text-xs">Planned<[/span](https://farcaster.xyz/~/channel/span)>
+  <[/div](https://farcaster.xyz/~/channel/div)>
+  <div className="px-3 py-3">
+    <p className="text-gray-600 text-[9.5px] leading-snug text-center">
+      Future Special Loyalty Bonus phases for long-term claimers · Milestones and dates TBD · Support fee may apply
+    <[/p](https://farcaster.xyz/~/channel/p)>
+  <[/div](https://farcaster.xyz/~/channel/div)>
+<[/div](https://farcaster.xyz/~/channel/div)>
+<[/div](https://farcaster.xyz/~/channel/div)>
             <p className="text-gray-700 text-[9px] text-center mt-3">Daily faucet cycle repeats every 30 days · Special Loyalty Bonuses are separate one-time claims</p>
           </div>
         </div>
