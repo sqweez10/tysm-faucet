@@ -1310,7 +1310,7 @@ export default function Home() {
                     </div>
                   ))}
                 </div>
-              </di<div className="bg-white/4 border border-emerald-500/25 rounded-2xl overflow-hidden">
+              <div className="bg-white/4 border border-emerald-500/25 rounded-2xl overflow-hidden">
                   <div className="bg-emerald-500/10 px-3 py-2.5 flex items-center justify-between">
                     <span className="text-emerald-300 font-black text-xs">🎁 Special Loyalty Bonus Pool · Planned</span>
                     <span className="text-emerald-400 font-bold text-xs">One-time · Separate</span>
