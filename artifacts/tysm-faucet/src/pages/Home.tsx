@@ -1322,36 +1322,35 @@ export default function Home() {
                     ].map(m => (
                       <div key={m.day} className="grid grid-cols-3 px-3 py-2 text-[11px]">
                         <span className="text-gray-500">Day {m.day}</span>
-                        <span className="text-gray-300 text-center">{m.label}</span>
-                        <span className="text-green-400 font-bold text-right">{m.bonus}</span>
-                      </div>
-                    ))}
-                    <div className="px-3 py-2">
-                      <p className="text-gray-600 text-[9.5px] leading-snug">Not paid by the daily faucet contract · Each milestone claimed once · Unlocked bonuses can be claimed later if missed · May include 0.0000038 ETH support fee (separate from Base gas)</p>
-                    </div>
+                                            <p className="text-gray-600 text-[9.5px] leading-snug">
+                      Not paid by the daily faucet contract · Each milestone claimed once · Unlock
+                    </p>
                   </div>
-                        <p className="text-gray-600 text-[9.5px] leading-snug">Not paid by the daily faucet contract · Each milestone claimed once · Unlock</p>
-      </div>
-    </div>
-  </div> 
-  <div className="bg-white/4 border border-purple-400/25 rounded-2xl overflow-hidden">
-    <div className="bg-purple-400/10 px-3 py-2.5 flex items-center justify-between">
-      <span className="text-purple-300 font-black text-xs">✨ C3 / C4 Phases · Coming Later</span>
-      <span className="text-purple-400 font-bold text-xs">Planned</span>
-    </div>
-    <div className="px-3 py-3">
-      <p className="text-gray-600 text-[9.5px] leading-snug text-center">
-        Future Special Loyalty Bonus phases for long-term claimers · Milestones and dates TBD · Support fee may apply
-      </p>
-    </div>
-  </div>
-</div>
-           <p className="text-gray-700 text-[9px] text-center mt-3">Daily faucet cycle repeats every 30 days · Special Loyalty Bonuses are separate one-time claims</p>
+                </div>
+              </div>
+
+              <div className="bg-white/4 border border-purple-400/25 rounded-2xl overflow-hidden">
+                <div className="bg-purple-400/10 px-3 py-2.5 flex items-center justify-between">
+                  <span className="text-purple-300 font-black text-xs">✨ C3 / C4 Phases · Coming Later</span>
+                  <span className="text-purple-400 font-bold text-xs">Planned</span>
+                </div>
+                <div className="px-3 py-3">
+                  <p className="text-gray-600 text-[9.5px] leading-snug text-center">
+                    Future Special Loyalty Bonus phases for long-term claimers · Milestones and dates TBD · Support fee may apply
+                  </p>
+                </div>
+              </div>
+
+              <p className="text-gray-700 text-[9px] text-center mt-3">
+                Daily faucet cycle repeats every 30 days · Special Loyalty Bonuses are separate one-time claims
+              </p>
+            </div>
           </div>
         </div>
       )}
 
       {activeTab === "board" && (
+
         <div className="fixed bottom-0 left-0 right-0 z-50 leaderboard-me px-4 py-2.5 backdrop-blur-sm">
           <div className="max-w-sm mx-auto grid grid-cols-12 gap-1 items-center">
             <p className="col-span-1 text-yellow-400 font-black text-sm">{myRank ? `#${myRank}` : "—"}</p>
