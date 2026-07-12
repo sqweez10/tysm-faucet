@@ -57,7 +57,6 @@ function claimHistoryKey(wallet?: string) {
 
 function loadClaimHistory(wallet?: string): ClaimHistoryItem[] {
   if (typeof window === "undefined") return [];
-
   try {
     return JSON.parse(localStorage.getItem(claimHistoryKey(wallet)) || "[]");
   } catch {
@@ -67,7 +66,6 @@ function loadClaimHistory(wallet?: string): ClaimHistoryItem[] {
 
 function saveClaimHistory(wallet: string | undefined, item: ClaimHistoryItem) {
   if (!wallet || typeof window === "undefined") return;
-
   const prev = loadClaimHistory(wallet);
   const next = [item, ...prev.filter((x) => x.txHash !== item.txHash)].slice(0, 10);
 
@@ -86,7 +84,8 @@ const REFERRAL_ABI = [
     inputs: [], outputs: [] },
   { name: "poolBalance",    type: "function", stateMutability: "view",
     inputs: [], outputs: [{ type: "uint256" }] },
-  { name: "isReferred",     type: "function", stateMutability: "view",
+  { name: "isReferred",    
+    type: "function", stateMutability: "view",
     inputs: [{ name: "", type: "address" }], outputs: [{ type: "bool" }] },
 ] as const;
 
@@ -96,6 +95,7 @@ function formatCountdown(s: number): string {
   const sec = s % 60;
   return [h, m, sec].map((v) => String(v).padStart(2, "0")).join(":");
 }
+
 function nextClaimUTC(secondsLeft: number): string {
   const t = new Date(Date.now() + secondsLeft * 1000);
   const h = String(t.getUTCHours()).padStart(2, "0");
@@ -103,9 +103,11 @@ function nextClaimUTC(secondsLeft: number): string {
   const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   return `${t.getUTCDate()} ${months[t.getUTCMonth()]} ${h}:${m} UTC`;
 }
+
 function formatAmount(amount: bigint): string {
   return Number(formatUnits(amount, 18)).toLocaleString("en-US", { maximumFractionDigits: 0 });
 }
+
 function fmt(n: number): string {
   return n.toLocaleString("en-US");
 }
@@ -236,7 +238,6 @@ export default function Home() {
   const [activeTab, setActiveTab]         = useState<"home" | "board" | "rewards">("home");
   const [monthSecs, setMonthSecs]         = useState(getMonthEndSecondsUTC());
   const [hearts, setHearts]               = useState(0);
-
   const [liveLeaderboard, setLiveLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [lbLoading,       setLbLoading]       = useState(false);
   const [lbUpdatedAt,     setLbUpdatedAt]     = useState(0);
@@ -248,28 +249,25 @@ export default function Home() {
   const [refCount,        setRefCount]        = useState<number | null>(null);
   const [refLoading,      setRefLoading]      = useState(false);
   const [refCopied,       setRefCopied]       = useState(false);
-
-    // UX-only: warns if the connected wallet differs from the last wallet seen
-    // for this Farcaster FID. Purely informational — never affects claim
-    // eligibility, cooldown, or countdown, which always read the on-chain
-    // contract with the currently connected wagmi address.
-    const [fidWalletMismatch, setFidWalletMismatch] = useState<string | null>(null);
+  // UX-only: warns if the connected wallet differs from the last wallet seen
+  // for this Farcaster FID.
+  // Purely informational — never affects claim
+  // eligibility, cooldown, or countdown, which always read the on-chain
+  // contract with the currently connected wagmi address.
+  const [fidWalletMismatch, setFidWalletMismatch] = useState<string | null>(null);
 
   const [claimHistory, setClaimHistory] = useState<ClaimHistoryItem[]>([]);
   const [lastClaim, setLastClaim] = useState<ClaimHistoryItem | null>(null);
   const processedClaimTxRef = useRef<`0x${string}` | null>(null);
 
   const { address, isConnected } = useAccount();
-
   useEffect(() => {
     if (!address) return;
     setClaimHistory(loadClaimHistory(address));
   }, [address]);
-
   const { connect } = useConnect();
   const publicClient = usePublicClient();
   const baseQ = { query: { enabled: contractReady && !!address } };
-
   const { data: canClaimData,  refetch: refetchCanClaim  } = useReadContract({
     address: FAUCET_ADDRESS, abi: FAUCET_ABI, functionName: "canClaim",
     args: [address!], ...baseQ,
@@ -290,14 +288,12 @@ export default function Home() {
     address: FAUCET_ADDRESS, abi: FAUCET_ABI, functionName: "totalClaimsCount",
     query: { enabled: contractReady },
   });
-
   const { writeContract, data: txHash, isPending: isWritePending, error: writeError } = useWriteContract();
   const {
     data: txReceipt,
     isLoading: isTxLoading,
     isSuccess: isTxSuccess,
   } = useWaitForTransactionReceipt({ hash: txHash });
-
   const refBaseQ = { query: { enabled: referralReady && !!address } };
   const { data: pendingRefData, refetch: refetchPendingRef } = useReadContract({
     address: REFERRAL_ADDRESS, abi: REFERRAL_ABI, functionName: "pendingRewards",
@@ -305,7 +301,6 @@ export default function Home() {
   });
   const { writeContract: writeRefClaim, data: refClaimHash, isPending: isRefClaimPending } = useWriteContract();
   const { isLoading: isRefClaimLoading, isSuccess: isRefClaimSuccess } = useWaitForTransactionReceipt({ hash: refClaimHash });
-
   useEffect(() => { if (isRefClaimSuccess) refetchPendingRef(); }, [isRefClaimSuccess, refetchPendingRef]);
 
   useEffect(() => {
@@ -323,11 +318,9 @@ export default function Home() {
     };
     if (!sdkReady) load();
   }, [sdkReady, connect]);
-
   useEffect(() => {
     if (timeLeftData !== undefined) setCountdown(Number(timeLeftData));
   }, [timeLeftData]);
-
   useEffect(() => {
     if (countdown <= 0) return;
     const id = setInterval(() => {
@@ -338,19 +331,18 @@ export default function Home() {
     }, 1000);
     return () => clearInterval(id);
   }, [countdown, refetchCanClaim, refetchTimeLeft]);
-
   useEffect(() => {
     const id = setInterval(() => setMonthSecs(getMonthEndSecondsUTC()), 1000);
     return () => clearInterval(id);
   }, []);
-
   const totalDays    = userInfoData ? Number(userInfoData[3]) : 0;
   const totalClaimed = userInfoData ? userInfoData[2] : BigInt(0);
   const faucetBal    = faucetBalData ?? BigInt(0);
   const canClaim     = canClaimData ?? false;
   const isBusy         = isWritePending || isTxLoading;
   const globalClaims   = totalClaimsData ? Number(totalClaimsData) : 0;
-  const faucetLow = contractReady && faucetBal > 0n && faucetBal < BigInt("100000000000000000000000"); // 100,000 TYSM
+  const faucetLow = contractReady && faucetBal > 0n && faucetBal < BigInt("100000000000000000000000");
+  // 100,000 TYSM
 
   const nextTotalDay  = totalDays + 1;
   const cycleInfo     = getCycleInfo(nextTotalDay);
@@ -404,7 +396,6 @@ export default function Home() {
           data: transferLog.data,
           topics: transferLog.topics,
         });
-
         actualReward = formatUnits(decoded.args.value as bigint, 18);
       }
     } catch {
@@ -419,7 +410,6 @@ export default function Home() {
       actualReward,
       createdAt: new Date().toISOString(),
     };
-
     setLastClaim(item);
 
     if (address) {
@@ -443,14 +433,12 @@ export default function Home() {
     refetchUserInfo,
     refetchBalance,
   ]);
-
   useEffect(() => {
     if (!writeError) return;
     setTxError("Transaction failed. Try again.");
     const id = setTimeout(() => setTxError(""), 4000);
     return () => clearTimeout(id);
   }, [writeError]);
-
   useEffect(() => {
     if (activeTab !== "board") return;
     let cancelled = false;
@@ -543,7 +531,6 @@ export default function Home() {
       }
     } catch { /* ignore */ }
   }, []);
-
   useEffect(() => {
     if (!address) return;
     try {
@@ -564,7 +551,6 @@ export default function Home() {
         .catch(() => { /* keep localStorage so it retries on next mount */ });
     } catch { /* ignore */ }
   }, [address]);
-
   useEffect(() => {
     if (activeTab !== "rewards" || !address) return;
     setRefLoading(true);
@@ -574,14 +560,11 @@ export default function Home() {
       .catch(() => {})
       .finally(() => setRefLoading(false));
   }, [activeTab, address]);
-
   const myRank         = address ? liveLeaderboard.find(e => e.address.toLowerCase() === address.toLowerCase())?.rank : undefined;
-
   const mDays = Math.floor(monthSecs / 86400);
   const mHrs  = Math.floor((monthSecs % 86400) / 3600);
   const mMins = Math.floor((monthSecs % 3600) / 60);
   const mSecs = monthSecs % 60;
-
   const handleShareFirst = useCallback(async () => {
     const name   = userCtx?.user?.displayName || userCtx?.user?.username || "Someone";
     const reward = fmt(rewardAmt);
@@ -597,7 +580,6 @@ export default function Home() {
     }
     setHasShared(true);
   }, [userCtx, rewardAmt, nextTotalDay, nextM, totalDays]);
-
   const handleShareAfter = useCallback(async () => {
     const name   = userCtx?.user?.displayName || userCtx?.user?.username || "Someone";
     const reward = fmt(rewardAmt);
@@ -612,7 +594,6 @@ export default function Home() {
       await sdk.actions.openUrl(url);
     }
   }, [userCtx, rewardAmt, totalDays, isOnMile]);
-
   const handleClaim = useCallback(() => {
     setTxError("");
     
@@ -638,70 +619,67 @@ export default function Home() {
       setTxError("Transaction failed. Please try again.");
     }
   }, [writeContract]);
-
   const handleEnableNotif = useCallback(async () => {
     try {
       await miniappSdk.actions.addFrame();
       setNotifEnabled(true);
     } catch { /* not in miniapp context */ }
   }, []);
-
   const handleCopyReferral = useCallback(() => {
     const link = address ? `${APP_URL}?ref=${address}` : APP_URL;
     navigator.clipboard.writeText(link).catch(() => {});
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }, [address]);
-
   const handleCopyRefLink = useCallback(() => {
     const link = address ? `${APP_URL}?ref=${address}` : APP_URL;
     navigator.clipboard.writeText(link).catch(() => {});
     setRefCopied(true);
     setTimeout(() => setRefCopied(false), 2500);
   }, [address]);
+  // UX-only: FID <-> wallet helper mapping. Never used for claim eligibility,
+  // cooldown, or countdown — those always come from the contract reads above,
+  // keyed by the currently connected wagmi `address`.
+  // This effect only:
+  //   1) looks up the last wallet seen for this FID, to show an informational
+  //      banner if it differs from the wallet connected right now
+  //   2) records the current (fid, wallet) pair for next time
+  // Any failure here (network, Redis down) is swallowed silently — the app
+  // must keep working normally regardless.
+  useEffect(() => {
+    const fid = userCtx?.user?.fid;
+    if (!address || !fid || !Number.isInteger(fid) || fid <= 0) {
+      setFidWalletMismatch(null);
+      return;
+    }
 
-    // UX-only: FID <-> wallet helper mapping. Never used for claim eligibility,
-    // cooldown, or countdown — those always come from the contract reads above,
-    // keyed by the currently connected wagmi `address`. This effect only:
-    //   1) looks up the last wallet seen for this FID, to show an informational
-    //      banner if it differs from the wallet connected right now
-    //   2) records the current (fid, wallet) pair for next time
-    // Any failure here (network, Redis down) is swallowed silently — the app
-    // must keep working normally regardless.
-    useEffect(() => {
-      const fid = userCtx?.user?.fid;
-      if (!address || !fid || !Number.isInteger(fid) || fid <= 0) {
-        setFidWalletMismatch(null);
-        return;
-      }
+    const currentWallet = address.toLowerCase();
+    let cancelled = false;
 
-      const currentWallet = address.toLowerCase();
-      let cancelled = false;
+    fetch(`/api/fid-wallet?fid=${encodeURIComponent(fid)}`)
+      .then(r => (r.ok ? r.json() : null))
+      .then((d: { wallet?: string | null } | null) => {
+        if (cancelled || !d) return;
+        const lastWallet = d.wallet ? d.wallet.toLowerCase() : null;
+        if (lastWallet && lastWallet !== currentWallet) {
+          setFidWalletMismatch(lastWallet);
+        } else {
+          setFidWalletMismatch(null);
+        }
+      })
+      .catch(() => { /* fail soft — never block the UI */ })
+      .finally(() => {
+        // Best-effort: record current pairing. Only fires once we have a
+        // valid fid AND a valid connected address (constraint #8).
+        fetch("/api/fid-wallet", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fid, wallet: currentWallet }),
+        }).catch(() => { /* fail soft */ });
+      });
 
-      fetch(`/api/fid-wallet?fid=${encodeURIComponent(fid)}`)
-        .then(r => (r.ok ? r.json() : null))
-        .then((d: { wallet?: string | null } | null) => {
-          if (cancelled || !d) return;
-          const lastWallet = d.wallet ? d.wallet.toLowerCase() : null;
-          if (lastWallet && lastWallet !== currentWallet) {
-            setFidWalletMismatch(lastWallet);
-          } else {
-            setFidWalletMismatch(null);
-          }
-        })
-        .catch(() => { /* fail soft — never block the UI */ })
-        .finally(() => {
-          // Best-effort: record current pairing. Only fires once we have a
-          // valid fid AND a valid connected address (constraint #8).
-          fetch("/api/fid-wallet", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ fid, wallet: currentWallet }),
-          }).catch(() => { /* fail soft */ });
-        });
-
-      return () => { cancelled = true; };
-    }, [address, userCtx?.user?.fid]);
+    return () => { cancelled = true; };
+  }, [address, userCtx?.user?.fid]);
 
   if (!sdkReady) {
     return (
@@ -753,8 +731,7 @@ export default function Home() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
               {userCtx?.user?.pfpUrl ? (
-                <img src={userCtx.user.pfpUrl} alt="pfp"
-                  className="w-10 h-10 rounded-full border-2 border-yellow-500/40 object-cover" />
+                <img src={userCtx.user.pfpUrl} alt="pfp" className="w-10 h-10 rounded-full border-2 border-yellow-500/40 object-cover" />
               ) : (
                 <div className="w-10 h-10 rounded-full bg-yellow-900/20 border-2 border-yellow-700/30 flex items-center justify-center text-xl">🙏</div>
               )}
@@ -776,16 +753,16 @@ export default function Home() {
             </div>
           </div>
 
-            {/* Informational only — never affects claim eligibility/cooldown/countdown */}
-            {fidWalletMismatch && (
-              <div className="bg-amber-900/20 border border-amber-700/30 rounded-xl px-3 py-2 flex items-start gap-2">
-                <span className="text-sm leading-none mt-0.5">⚠️</span>
-                <p className="text-amber-300/90 text-[10.5px] leading-snug">
-                  You previously connected a different wallet ({fidWalletMismatch.slice(0, 6)}...{fidWalletMismatch.slice(-4)}).
-                  Streak and cooldown always follow the wallet you're connected with now.
-                </p>
-              </div>
-            )}
+          {/* Informational only — never affects claim eligibility/cooldown/countdown */}
+          {fidWalletMismatch && (
+            <div className="bg-amber-900/20 border border-amber-700/30 rounded-xl px-3 py-2 flex items-start gap-2">
+              <span className="text-sm leading-none mt-0.5">⚠️</span>
+              <p className="text-amber-300/90 text-[10.5px] leading-snug">
+                You previously connected a different wallet ({fidWalletMismatch.slice(0, 6)}...{fidWalletMismatch.slice(-4)}).
+                Streak and cooldown always follow the wallet you're connected with now.
+              </p>
+            </div>
+          )}
 
           <div className="text-center py-1">
             <div className="text-5xl mb-1" style={{ animation: "float 3s ease-in-out infinite" }}>🙏</div>
@@ -796,563 +773,379 @@ export default function Home() {
           <div className="flex items-center justify-center gap-2">
             <CycleBadge cycle={cycleInfo.cycle} />
             <p className="text-gray-500 text-[11px]">
-              {cycleInfo.cycle === 1 ? "Base: 2,000 $TYSM/day"
-              : cycleInfo.cycle === 2 ? "Cycle 2: Daily 2,000 + bigger milestone bonuses"
-              : "Cycle 3+: Daily 2,000 + elite milestone bonuses"}
+              {cycleInfo.cycle === 1 ? "Base: 2,000 $TYSM/day" : cycleInfo.cycle === 2 ? "Cycle 2: Daily 2,000 + bigger milestone bonuses" : "Cycle 3+: Daily 2,000 + maximum milestone bonuses"}
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-2">
-            <div className="bg-white/4 border border-yellow-900/20 rounded-2xl p-3">
-              <p className="text-gray-500 text-[9px] uppercase tracking-widest mb-0.5">Faucet Pool</p>
-              <p className="text-yellow-400 font-black text-base leading-tight">
-                {contractReady ? formatAmount(faucetBal) : "—"}
-              </p>
-              <p className="text-gray-600 text-[10px]">$TYSM left</p>
-            </div>
-            <div className="bg-white/4 border border-green-900/20 rounded-2xl p-3">
-              <p className="text-gray-500 text-[9px] uppercase tracking-widest mb-0.5">You Claimed</p>
-              <p className="text-green-400 font-black text-base leading-tight">
-                {totalClaimed > BigInt(0) ? formatAmount(totalClaimed) : "0"}
-              </p>
-              <p className="text-gray-600 text-[10px]">$TYSM total</p>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between bg-white/4 border border-white/8 rounded-xl px-4 py-2">
-            <span className="text-gray-500 text-[10px]">🌍 Total Global Claims</span>
-            <span className="text-yellow-400 font-black text-sm">
-              {globalClaims > 0 ? globalClaims.toLocaleString() : "—"}
-            </span>
-          </div>
-          {faucetLow && (
-            <div className="flex items-center gap-2 bg-red-950/40 border border-red-700/40 rounded-xl px-3 py-2.5">
-              <span className="text-lg">⚠️</span>
-              <p className="text-red-300 text-[11px] font-semibold leading-snug">
-                Faucet pool is running low — refill coming soon!
-              </p>
-            </div>
-          )}
-
-          <div className="bg-white/4 border border-yellow-900/20 rounded-2xl p-3.5">
-            <div className="flex justify-between items-center mb-2">
-              <p className="text-gray-400 text-xs font-medium">
-                {cycleInfo.cycleLabel} Progress
-              </p>
-              <p className="text-yellow-400 text-xs font-black">Day {cyclePos}/30</p>
-            </div>
-            <div className="relative w-full bg-gray-800/80 rounded-full h-3 overflow-hidden mb-1">
-              <div className="h-3 rounded-full transition-all duration-700"
-                style={{ width: `${cyclePct}%`, background: "linear-gradient(90deg,#f59e0b,#fcd34d)" }} />
-              {milestoneMarkers.map((m) => (
-                <div key={m.pct} className="absolute top-0 h-full w-0.5"
-                  style={{ left: `${m.pct}%`, background: m.color + "60" }} />
-              ))}
-            </div>
-            <div className="flex justify-between mt-1.5">
-              {currentMilestones.map((m) => (
-                <div key={m.day} className="text-center">
-                  <p className="text-[10px]" style={{ color: totalDays >= m.day ? "#f59e0b" : "#4b5563" }}>🎁</p>
-                  <p className="text-[8px] text-gray-600">D{m.day}</p>
-                  <p className="text-[8px] font-bold" style={{ color: totalDays >= m.day ? "#f59e0b" : "#4b5563" }}>
-                    {fmt(m.reward)}
-                  </p>
+          <div className="bg-white/4 border border-white/5 rounded-2xl p-4 relative overflow-hidden">
+            <div className="absolute top-0 right-0 left-0 h-[2px] bg-gradient-to-r from-transparent via-yellow-500/40 to-transparent" style={{ animation: "glow 2s infinite" }} />
+            <div className="flex justify-between items-start mb-3">
+              <div>
+                <p className="text-gray-500 text-[10px] uppercase tracking-wider mb-0.5">Next Claim Value</p>
+                <div className="flex items-baseline gap-1.5">
+                  <span className={`font-black text-3xl text-yellow-400 ${isOnMile ? "shimmer-text mile-pulse" : ""}`}>
+                    {fmt(rewardAmt)}
+                  </span>
+                  <span className="text-gray-500 text-xs font-bold">$TYSM</span>
+                  {isOnMile && (
+                    <span className="ml-1 text-[10px] bg-purple-500/20 text-purple-300 border border-purple-500/30 px-1.5 py-0.5 rounded-md font-black uppercase tracking-wider animate-pulse">
+                      Milestone 🎁
+                    </span>
+                  )}
                 </div>
-              ))}
+              </div>
+              <div className="text-right">
+                <p className="text-gray-500 text-[10px] uppercase tracking-wider mb-0.5">Cycle Progress</p>
+                <p className="text-white font-black text-sm">{cyclePos}<span className="text-gray-600 font-normal text-xs">/30d</span></p>
+              </div>
             </div>
+
+            <div className="relative pt-2 pb-1">
+              <div className="h-2 w-full bg-white/5 rounded-full overflow-visible relative">
+                <div className="h-full bg-gradient-to-r from-yellow-500 to-amber-500 rounded-full transition-all duration-500 relative" style={{ width: `${cyclePct}%` }}>
+                  <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-yellow-300 rounded-full shadow-[0_0_8px_#f59e0b] scale-110" />
+                </div>
+                {milestoneMarkers.map((m, idx) => {
+                  const isHit = cyclePos >= parseFloat(m.label.replace("D",""));
+                  return (
+                    <div key={idx} className="absolute top-1/2 -translate-y-1/2 flex flex-col items-center" style={{ left: `${m.pct}%` }}>
+                      <div className="w-1.5 h-1.5 rounded-full border transition-all" style={{ backgroundColor: isHit ? m.color : "#1f2937", borderColor: m.color }} />
+                      <span className="text-[8px] font-black mt-3 transition-colors" style={{ color: isHit ? m.color : "#4b5563" }}>
+                        {m.label}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
             {nextM && (
-              <div className="mt-2.5 bg-white/5 border border-yellow-800/20 rounded-xl px-3 py-1.5 flex justify-between items-center">
-                <p className="text-gray-500 text-[10px]">Next Milestone</p>
-                <p className="text-yellow-400 text-[10px] font-bold">
-                  🎁 Day {nextM.day} → {fmt(nextM.reward)} $TYSM ({nextM.day - totalDays}d left)
+              <p className="text-gray-600 text-[10px] text-center mt-5">
+                Next Milestone: <span className="text-yellow-500/90 font-bold">Day {nextM.day}</span> → <span className="text-yellow-400 font-bold">+{fmt(nextM.reward)} $TYSM</span> bonus!
+              </p>
+            )}
+          </div>
+
+          <div className="space-y-2.5 pt-1">
+            {!isConnected ? (
+              <button disabled className="w-full bg-amber-500/10 border border-amber-500/20 text-amber-400 font-bold py-3.5 px-4 rounded-xl text-xs uppercase tracking-widest animate-pulse">
+                🔑 WALLET CONNECTING VIA FRAME...
+              </button>
+            ) : canClaim ? (
+              justClaimed && !hasShared ? (
+                <button onClick={handleShareFirst} className="w-full bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-600 hover:to-yellow-600 text-black font-black py-4 px-4 rounded-xl text-xs uppercase tracking-widest shadow-[0_4px_20px_rgba(245,158,11,0.25)] transition-all transform hover:-translate-y-0.5 active:translate-y-0">
+                  📢 Cast to Verify & Unlock Claim
+                </button>
+              ) : (
+                <button onClick={handleClaim} disabled={isBusy}
+                  className="w-full bg-gradient-to-r from-yellow-400 via-amber-500 to-yellow-400 text-black font-black py-4 px-4 rounded-xl text-xs uppercase tracking-widest shadow-[0_4px_20px_rgba(234,179,8,0.3)] transition-all transform hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 disabled:pointer-events-none" style={{ backgroundSize: '200% auto', animation: 'shimmer 3s linear infinite' }}>
+                  {isWritePending ? "✍️ APPROVE IN WALLET..." : isTxLoading ? "⏳ MINING TRANSACTION..." : "🙏 CLAIM DAILY $TYSM"}
+                </button>
+              )
+            ) : (
+              <div className="bg-white/4 border border-white/5 rounded-xl p-3.5 text-center">
+                <p className="text-gray-500 text-[10px] uppercase tracking-widest mb-1">Cooldown Active</p>
+                <p className="text-2xl font-black text-gray-300 tracking-wider font-mono">
+                  {countdown > 0 ? formatCountdown(countdown) : "00:00:00"}
                 </p>
+                <p className="text-gray-600 text-[10px] mt-1.5">
+                  Next claim available at <span className="text-gray-400 font-medium">{countdown > 0 ? nextClaimUTC(countdown) : "—"}</span>
+                </p>
+                {justClaimed && (
+                  <button onClick={handleShareAfter} className="mt-3 inline-flex items-center gap-1.5 bg-white/5 border border-white/10 hover:bg-white/10 text-yellow-400/90 font-bold text-[11px] py-1.5 px-3 rounded-lg transition-all">
+                    <span>📢 Share Streak Cast</span>
+                  </button>
+                )}
+              </div>
+            )}
+
+            {txError && (
+              <div className="bg-red-950/30 border border-red-500/20 text-red-400 text-[11px] font-medium py-2.5 px-3 rounded-xl text-center animate-shake">
+                ❌ {txError}
               </div>
             )}
           </div>
 
-          <div className="bg-white/4 border border-yellow-900/20 rounded-2xl p-4 text-center"
-            style={{ boxShadow: isOnMile ? "0 0 32px rgba(245,158,11,0.28)" : "0 0 20px rgba(245,158,11,0.08)" }}>
-            {!contractReady ? (
-              <p className="text-gray-600 text-sm py-4">Deploy contract first...</p>
-            ) : canClaim ? (
-              <>
-                {isOnMile ? (
-                  <div className="mile-pulse inline-flex items-center gap-1.5 bg-yellow-950/60 border border-yellow-500/40 rounded-full px-3 py-1 mb-2.5">
-                    <span>🎁</span>
-                    <p className="text-yellow-300 text-[11px] font-black">MILESTONE DAY!</p>
-                  </div>
-                ) : (
-                  <div className="inline-flex items-center gap-1.5 bg-green-950/60 border border-green-700/30 rounded-full px-3 py-1 mb-2.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-                    <p className="text-green-400 text-[11px] font-bold">READY TO CLAIM</p>
-                  </div>
-                )}
-                <p className="font-black text-yellow-400 leading-none mb-0.5" style={{ fontSize: 48 }}>
-                  {fmt(rewardAmt)}
-                </p>
-                <p className="text-gray-500 text-sm mb-3">$TYSM tokens</p>
-                {txError && (
-                  <p className="text-red-400 text-xs mb-2 bg-red-950/30 rounded-lg p-1.5">{txError}</p>
-                )}
-                {isTxSuccess && justClaimed && lastClaim && (
-                  <div className="rounded-xl border border-green-500/30 bg-green-500/10 p-3 text-sm text-green-200 mb-2 text-left">
-                    <div className="font-black">✅ Claim successful</div>
-
-                    <div className="mt-1 text-xs">
-                      Day {lastClaim.claimedDay} · Expected {fmt(lastClaim.expectedReward)} TYSM
-                      {lastClaim.actualReward
-                        ? ` · Paid ${Number(lastClaim.actualReward).toLocaleString("en-US", {
-                            maximumFractionDigits: 0,
-                          })} TYSM`
-                        : ""}
-                    </div>
-
-                    <div className="mt-2 flex gap-2">
-                      <button
-                        className="rounded-lg bg-green-500/20 px-3 py-1 text-xs font-bold"
-                        onClick={() =>
-                          sdk.actions.openUrl(`https://basescan.org/tx/${lastClaim.txHash}`)
-                        }
-                      >
-                        View on BaseScan
-                      </button>
-
-                      <button
-                        className="rounded-lg bg-white/10 px-3 py-1 text-xs font-bold"
-                        onClick={() => navigator.clipboard.writeText(lastClaim.txHash)}
-                      >
-                        Copy Tx
-                      </button>
-                    </div>
-                  </div>
-                )}
-                {!hasShared ? (
-                  <div className="space-y-2">
-                    <button onClick={handleShareFirst} className="w-full font-black py-3.5 rounded-xl text-base transition-all active:scale-95 flex items-center justify-center gap-2 text-white" style={{ background: "linear-gradient(135deg,#7c3aed,#6d28d9)" }}>
-                      ⚡ Share First → Unlock Claim!
-                    </button>
-                    <p className="text-gray-600 text-[10px]">Share to unlock the Claim button 🙏</p>
-                  </div>
-                ) : (
-                  <button onClick={handleClaim} disabled={isBusy || !isConnected} className="w-full font-black py-4 rounded-xl text-lg transition-all active:scale-95 text-white" style={{ background: isBusy || !isConnected ? "#374151" : "linear-gradient(90deg,#f59e0b,#fcd34d)" }}>
-                    {isBusy ? "Processing..." : "🙏 Claim Free $TYSM"}
-                  </button>
-                )}
-              </>
-            ) : (
-              <div className="py-2">
-                <div className="inline-flex items-center gap-1.5 bg-gray-950 border border-gray-800 rounded-full px-3 py-1 mb-3">
-                  <span className="w-1.5 h-1.5 rounded-full bg-gray-600" />
-                  <p className="text-gray-500 text-[11px] font-bold uppercase tracking-wider">Claimed · Next in</p>
-                </div>
-                <p className="font-mono text-3xl font-black text-gray-400 tracking-wider mb-1">
-                  {formatCountdown(countdown)}
-                </p>
-                <p className="text-gray-600 text-[11px] font-mono mb-2">
-                  Available {nextClaimUTC(countdown)}
-                </p>
-                <button onClick={handleShareAfter} className="w-full font-bold py-2.5 rounded-xl text-xs bg-white/5 border border-white/10 hover:bg-white/10 transition-all flex items-center justify-center gap-1.5 text-gray-300">
-                  📢 Broadcast Your Streak
+          {lastClaim && (
+            <div className="bg-green-950/20 border border-green-500/20 rounded-xl p-3 text-center animate-fadeIn">
+              <p className="text-green-400 font-black text-xs uppercase tracking-wider mb-1">🎉 Claim Successful!</p>
+              <p className="text-gray-400 text-[10px] leading-relaxed">
+                Day {lastClaim.claimedDay} streak registered. Received{" "}
+                <span className="text-yellow-400 font-bold">
+                  {lastClaim.actualReward ? parseFloat(lastClaim.actualReward).toLocaleString("en-US") : fmt(lastClaim.expectedReward)}
+                </span>{" "}
+                $TYSM.
+              </p>
+              <div className="mt-2 flex items-center justify-center gap-3 text-[10px]">
+                <a href={`https://basescan.org/tx/${lastClaim.txHash}`} target="_blank" rel="noopener noreferrer" className="text-gray-500 hover:text-gray-300 underline font-medium">
+                  View on BaseScan ↗
+                </a>
+                <button onClick={() => { navigator.clipboard.writeText(lastClaim.txHash).catch(()=>{}); alert("Tx Hash copied!"); }} className="text-gray-500 hover:text-gray-300 underline font-medium">
+                  Copy Tx
                 </button>
-                <div className="grid grid-cols-2 gap-2 mt-2">
-                  <button onClick={handleEnableNotif}
-                    className="font-bold py-2 rounded-xl text-[11px] flex items-center justify-center gap-1 transition-all active:scale-95"
-                    style={{ background: notifEnabled ? "rgba(124,58,237,0.2)" : "rgba(255,255,255,0.04)", border: notifEnabled ? "1px solid rgba(124,58,237,0.5)" : "1px solid rgba(124,58,237,0.25)", color: notifEnabled ? "#c4b5fd" : "#a78bfa" }}>
-                    {notifEnabled ? "🔔 On!" : "🔔 Notify Me"}
-                  </button>
-                  <button onClick={handleCopyReferral}
-                    className="font-bold py-2 rounded-xl text-[11px] flex items-center justify-center gap-1 transition-all active:scale-95"
-                    style={{ background: copied ? "rgba(16,185,129,0.2)" : "rgba(255,255,255,0.04)", border: copied ? "1px solid rgba(16,185,129,0.5)" : "1px solid rgba(59,130,246,0.25)", color: copied ? "#6ee7b7" : "#93c5fd" }}>
-                    {copied ? "✅ Copied!" : "🔗 Invite Friend"}
-                  </button>
-                </div>
               </div>
+            </div>
+          )}
+
+          {/* Referral Card */}
+          <div className="bg-gradient-to-b from-purple-950/10 to-transparent border border-purple-500/10 rounded-2xl p-4 mt-1">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-1.5">
+                <span className="text-sm">🔗</span>
+                <h3 className="text-purple-300 font-black text-xs uppercase tracking-wider">Referral Program</h3>
+              </div>
+              <span className="text-[9px] bg-purple-500/10 text-purple-400 border border-purple-500/20 px-1.5 py-0.5 rounded font-bold uppercase tracking-wide">
+                +10% Bonus
+              </span>
+            </div>
+            <p className="text-gray-500 text-[11px] leading-normal mb-3">
+              Earn an extra <span className="text-purple-300 font-bold">10%</span> of all daily claims made by users you invite. Directly deposited to your pending rewards pool.
+            </p>
+            <div className="flex gap-2">
+              <button onClick={handleCopyReferral} className="flex-1 bg-purple-500/10 border border-purple-500/20 hover:bg-purple-500/20 text-purple-300 font-bold py-2.5 px-3 rounded-xl text-[11px] transition-all truncate">
+                {copied ? "✅ Link Copied!" : "📋 Copy My Invite Link"}
+              </button>
+            </div>
+          </div>
+
+          <div className="bg-white/4 border border-white/5 rounded-2xl p-3.5 space-y-2">
+            <div className="flex justify-between text-[11px] text-gray-500 border-b border-white/5 pb-2">
+              <span className="font-medium">Total Global Claims</span>
+              <span className="text-gray-300 font-bold font-mono">{globalClaims > 0 ? fmt(globalClaims) : "—"}</span>
+            </div>
+            <div className="flex justify-between text-[11px] text-gray-500 pt-0.5">
+              <span className="font-medium">Faucet Contract Balance</span>
+              <span className={`font-mono font-bold ${faucetLow ? "text-red-400 animate-pulse" : "text-gray-300"}`}>
+                {contractReady ? `${formatAmount(faucetBal)} TYSM` : "—"}
+              </span>
+            </div>
+            {faucetLow && (
+              <p className="text-[9.5px] text-red-400/90 text-center bg-red-950/20 border border-red-500/10 py-1 px-2 rounded-lg leading-tight mt-1 animate-pulse">
+                ⚠️ Faucet balance is running low. Claims may fail if it empties before refill.
+              </p>
             )}
           </div>
 
           {claimHistory.length > 0 && (
-            <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4 text-left">
-              <div className="mb-3 flex items-center justify-between">
-                <h3 className="text-sm font-black">Recent Claims</h3>
-                <span className="text-[10px] text-gray-400">last 10</span>
-              </div>
-
-              <div className="space-y-2">
-                {claimHistory.map((item) => (
-                  <div
-                    key={item.txHash}
-                    className="flex items-center justify-between rounded-xl bg-black/20 px-3 py-2"
-                  >
+            <div className="pt-2">
+              <h3 className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 pl-1">Your Recent Claims</h3>
+              <div className="bg-white/4 border border-white/5 rounded-2xl overflow-hidden divide-y divide-white/5">
+                {claimHistory.map((h, i) => (
+                  <div key={i} className="px-3.5 py-2.5 flex items-center justify-between text-[11px]">
                     <div>
-                      <div className="text-xs font-bold">
-                        Day {item.claimedDay} ·{" "}
-                        {item.actualReward
-                          ? `${Number(item.actualReward).toLocaleString("en-US", {
-                              maximumFractionDigits: 0,
-                          })} TYSM`
-                          : `${fmt(item.expectedReward)} TYSM expected`}
-                      </div>
-
-                      <div className="text-[10px] text-gray-500">
-                        {new Date(item.createdAt).toLocaleString()}
-                      </div>
+                      <p className="text-gray-300 font-bold">Day {h.claimedDay}</p>
+                      <p className="text-gray-600 text-[9.5px] font-mono mt-0.5">
+                        {h.txHash.slice(0, 6)}...{h.txHash.slice(-4)}
+                      </p>
                     </div>
-
-                    <button
-                      className="rounded-lg bg-purple-500/20 px-2 py-1 text-[10px] font-bold text-purple-200"
-                      onClick={() =>
-                        sdk.actions.openUrl(`https://basescan.org/tx/${item.txHash}`)
-                      }
-                    >
-                      BaseScan
-                    </button>
+                    <div className="text-right">
+                      <p className="text-yellow-400 font-black">
+                        +{h.actualReward ? parseFloat(h.actualReward).toLocaleString("en-US") : fmt(h.expectedReward)}
+                      </p>
+                      <p className="text-gray-600 text-[9px] mt-0.5">
+                        {new Date(h.createdAt).toLocaleDateString("en-US", { month: 'short', day: 'numeric' })}
+                      </p>
+                    </div>
                   </div>
                 ))}
               </div>
             </div>
           )}
+
+          <div className="text-center pt-4">
+            <button onClick={handleEnableNotif} disabled={notifEnabled}
+              className="inline-flex items-center gap-1.5 text-[10px] font-bold text-gray-600 hover:text-gray-400 transition-all disabled:opacity-40 disabled:pointer-events-none">
+              <span>{notifEnabled ? "🔔 Notifications Enabled" : "🔔 Enable Reminders (Add Frame)"}</span>
+            </button>
+          </div>
         </div>
       )}
 
       {activeTab === "board" && (
-        <div className="max-w-sm mx-auto px-4 pt-4 pb-24 space-y-4">
-          <div className="text-center py-2">
-            <h2 className="text-2xl font-black shimmer-text">Global Leaderboard</h2>
-            <p className="text-gray-500 text-[11px]">The most loyal $TYSM claimers in the ecosystem</p>
+        <div className="max-w-sm mx-auto px-4 pt-5 pb-24">
+          <div className="text-center mb-5">
+            <h2 className="text-xl font-black text-yellow-400 tracking-wide">STREAK LEADERBOARD</h2>
+            <p className="text-gray-500 text-[10px] uppercase tracking-widest mt-0.5">Top 100 Longest Active Claimers</p>
           </div>
 
-          <div className="bg-white/4 border border-white/8 rounded-2xl overflow-hidden">
-            <div className="px-3 py-2 border-b border-white/5 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <p className="text-gray-300 text-xs font-bold">🏆 Community Ranks</p>
-                <span className="flex items-center gap-1 bg-green-900/30 border border-green-700/30 rounded-full px-2 py-0.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-                  <span className="text-green-400 text-[9px] font-bold">LIVE</span>
-                </span>
-              </div>
-              <p className="text-gray-600 text-[9px]">
-                {lbLoading ? "Updating..." : lbUpdatedAt > 0 ? "Updated" : ""}
-              </p>
+          <div className="bg-white/4 border border-white/5 rounded-2xl overflow-hidden">
+            <div className="bg-white/5 px-4 py-2.5 grid grid-cols-12 gap-1 text-[10px] font-black tracking-widest text-gray-500 uppercase border-b border-white/5">
+              <span className="col-span-2">Rank</span>
+              <span className="col-span-5">User</span>
+              <span className="col-span-2 text-center">Days</span>
+              <span className="col-span-3 text-right">Streak</span>
             </div>
 
-            {lbError && (
-              <div className="px-3 py-3 bg-red-950/20 border-b border-red-800/20 flex flex-col items-center gap-2">
-                <p className="text-red-400 text-[10px] text-center">Failed to load leaderboard data.</p>
-                <button
-                  onClick={() => { setLbError(false); setLbRetryKey(k => k + 1); }}
-                  className="text-[10px] font-bold text-yellow-400 bg-yellow-950/40 border border-yellow-700/30 rounded-full px-3 py-1 active:scale-95 transition-all">
-                  🔄 Retry
+            {lbLoading && liveLeaderboard.length === 0 ? (
+              <div className="py-12 text-center">
+                <div className="w-6 h-6 border-2 border-yellow-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                <p className="text-gray-500 text-xs tracking-wider animate-pulse">READING CONTRACT STATE...</p>
+              </div>
+            ) : lbError && liveLeaderboard.length === 0 ? (
+              <div className="py-12 text-center px-4">
+                <p className="text-red-400 text-xs font-medium">Failed to fetch leaderboard data.</p>
+                <button onClick={() => setLbRetryKey(k => k + 1)} className="mt-3 bg-white/5 border border-white/10 hover:bg-white/10 text-gray-300 font-bold text-xs py-1.5 px-3 rounded-xl transition-all">
+                  🔄 Retry Load
                 </button>
               </div>
-            )}
-
-            <div className="grid grid-cols-12 gap-1 px-3 py-1.5 border-b border-white/5">
-              <p className="col-span-1 text-gray-600 text-[9px] font-bold uppercase">#</p>
-              <p className="col-span-4 text-gray-600 text-[9px] font-bold uppercase">User</p>
-              <p className="col-span-2 text-gray-600 text-[9px] font-bold uppercase text-center">Days</p>
-              <p className="col-span-2 text-gray-600 text-[9px] font-bold uppercase text-center">Rate</p>
-              <p className="col-span-3 text-gray-600 text-[9px] font-bold uppercase text-center">Shield</p>
-            </div>
-
-            {lbLoading && liveLeaderboard.length === 0 && (
+            ) : liveLeaderboard.length === 0 ? (
+              <div className="py-12 text-center">
+                <p className="text-gray-500 text-xs">No active claims found on-chain yet.</p>
+              </div>
+            ) : (
               <div className="divide-y divide-white/5">
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <div key={i} className="grid grid-cols-12 gap-1 px-3 py-2.5 items-center animate-pulse">
-                    <div className="col-span-1 h-3 bg-white/10 rounded" />
-                    <div className="col-span-4 h-3 bg-white/10 rounded" />
-                    <div className="col-span-2 h-3 bg-white/10 rounded mx-auto w-8" />
-                    <div className="col-span-2 h-3 bg-white/10 rounded mx-auto w-6" />
-                    <div className="col-span-3 h-3 bg-white/10 rounded mx-auto w-8" />
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {!lbLoading && liveLeaderboard.length === 0 && !lbError && (
-              <div className="px-3 py-8 text-center">
-                <p className="text-gray-600 text-xs">No claimers found yet</p>
-                <p className="text-gray-700 text-[10px] mt-1">Be the first to claim!</p>
-              </div>
-            )}
-
-            {liveLeaderboard.length > 0 && (() => {
-              const LB_PER_PAGE = 10;
-              const totalPages  = Math.ceil(liveLeaderboard.length / LB_PER_PAGE);
-              const pageRows    = liveLeaderboard.slice((lbPage - 1) * LB_PER_PAGE, lbPage * LB_PER_PAGE);
-
-              const pageNums = (() => {
-                if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i + 1);
-                const pages: (number | "...")[] = [1];
-                if (lbPage > 3) pages.push("...");
-                for (let p = Math.max(2, lbPage - 1); p <= Math.min(totalPages - 1, lbPage + 1); p++) pages.push(p);
-                if (lbPage < totalPages - 2) pages.push("...");
-                pages.push(totalPages);
-                return pages;
-              })();
-
-              return (
-                <>
-                  <div className="divide-y divide-white/5">
-                    {pageRows.map((row) => {
-                      const ci        = getCycleInfo(row.totalDays);
-                      const rankColor =
-                        row.rank === 1 ? "#f59e0b"
-                        : row.rank === 2 ? "#9ca3af"
-                        : row.rank === 3 ? "#d97706"
-                        : "#4b5563";
-                      return (
-                        <div key={row.address}
-                          className="grid grid-cols-12 gap-1 px-3 py-2.5 items-center transition-colors hover:bg-white/3">
-                          <p className="col-span-1 font-black text-sm" style={{ color: rankColor }}>
-                            {row.rank <= 3 ? ["🥇", "🥈", "🥉"][row.rank - 1] : row.rank}
-                          </p>
-                          <div className="col-span-4 flex items-center gap-1 min-w-0">
-                            <p className="text-gray-300 text-[11px] font-medium truncate">{row.handle}</p>
-                            <CycleBadge cycle={ci.cycle} />
-                          </div>
-                          <p className="col-span-2 text-yellow-400 font-black text-[11px] text-center">{row.totalDays}🔥</p>
-                          <p className="col-span-2 text-green-400 text-[10px] font-bold text-center">
-                            {(ci.baseRate / 1000).toFixed(0)}K
-                          </p>
-                          <div className="col-span-3 flex justify-center">
-                            <span className="text-[9px] font-bold rounded-full px-1.5 py-0.5"
-                              style={{ color: heartColor(row.hearts), background: heartBg(row.hearts), border: `1px solid ${heartColor(row.hearts)}40` }}>
-                              {row.hearts}/3
-                            </span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {totalPages > 1 && (
-                    <div className="flex items-center justify-center gap-1 px-3 py-3 border-t border-white/5">
-                      <button
-                        onClick={() => setLbPage(p => Math.max(1, p - 1))}
-                        disabled={lbPage === 1}
-                        className="w-7 h-7 rounded-full text-xs font-bold flex items-center justify-center transition-all disabled:opacity-30"
-                        style={{ background: "rgba(255,255,255,0.05)", color: "#9ca3af" }}>
-                        ‹
-                      </button>
-                      {pageNums.map((p, i) =>
-                        p === "..." ? (
-                          <span key={`dot-${i}`} className="w-7 h-7 flex items-center justify-center text-gray-600 text-xs">…</span>
+                {liveLeaderboard.slice((lbPage - 1) * 20, lbPage * 20).map((e) => {
+                  const isMe = address && e.address.toLowerCase() === address.toLowerCase();
+                  const pzClass = e.rank === 1 ? "prize-gold" : e.rank === 2 ? "prize-silver" : e.rank === 3 ? "prize-bronze" : "";
+                  return (
+                    <div key={e.rank} className={`px-4 py-3 grid grid-cols-12 gap-1 items-center text-xs transition-colors ${isMe ? "bg-yellow-500/10" : "hover:bg-white/2"}`}>
+                      <div className="col-span-2 flex items-center">
+                        {e.rank <= 3 ? (
+                          <span className={`w-5 h-5 rounded-md flex items-center justify-center font-black text-[10px] text-yellow-100 shadow-sm ${pzClass}`}>
+                            {e.rank}
+                          </span>
                         ) : (
-                          <button
-                            key={p}
-                            onClick={() => setLbPage(p as number)}
-                            className="w-7 h-7 rounded-full text-[11px] font-bold flex items-center justify-center transition-all active:scale-95"
-                            style={lbPage === p
-                              ? { background: "#7c3aed", color: "#fff", boxShadow: "0 0 8px rgba(124,58,237,0.5)" }
-                              : { background: "rgba(255,255,255,0.05)", color: "#6b7280" }}>
-                            {p}
-                          </button>
-                        )
-                      )}
-                      <button
-                        onClick={() => setLbPage(p => Math.min(totalPages, p + 1))}
-                        disabled={lbPage === totalPages}
-                        className="w-7 h-7 rounded-full text-xs font-bold flex items-center justify-center transition-all disabled:opacity-30"
-                        style={{ background: "rgba(255,255,255,0.05)", color: "#9ca3af" }}>
-                        ›
-                      </button>
+                          <span className="text-gray-500 font-mono pl-1">{e.rank}</span>
+                        )}
+                      </div>
+                      <div className="col-span-5 truncate pr-2">
+                        <span className={`font-bold block truncate ${isMe ? "text-yellow-400 font-black" : "text-gray-200"}`}>
+                          {e.handle.startsWith("@") ? e.handle : e.handle}
+                        </span>
+                      </div>
+                      <div className="col-span-2 text-center font-black text-gray-300 font-mono">
+                        {e.totalDays}
+                      </div>
+                      <div className="col-span-3 text-right font-bold text-gray-400 font-mono">
+                        {e.streak}d 🔥
+                      </div>
                     </div>
-                  )}
-                </>
-              );
-            })()}
-
-            <div className="px-3 py-2 border-t border-white/5">
-              <p className="text-gray-700 text-[9px] text-center">
-                Refreshed on tab open · Sorted by Total Days claimed
-              </p>
-            </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
+
+          {liveLeaderboard.length > 20 && (
+            <div className="flex items-center justify-between mt-4 px-1">
+              <button disabled={lbPage === 1} onClick={() => setLbPage(p => p - 1)} className="bg-white/4 border border-white/5 hover:bg-white/10 disabled:opacity-30 disabled:pointer-events-none text-gray-300 text-xs font-bold py-1.5 px-3 rounded-xl transition-all">
+                ← Previous
+              </button>
+              <span className="text-[11px] text-gray-500 font-medium">Page {lbPage} of {Math.ceil(liveLeaderboard.length / 20)}</span>
+              <button disabled={lbPage >= Math.ceil(liveLeaderboard.length / 20)} onClick={() => setLbPage(p => p + 1)} className="bg-white/4 border border-white/5 hover:bg-white/10 disabled:opacity-30 disabled:pointer-events-none text-gray-300 text-xs font-bold py-1.5 px-3 rounded-xl transition-all">
+                Next →
+              </button>
+            </div>
+          )}
+
+          {lbUpdatedAt > 0 && (
+            <div className="text-center mt-5 flex items-center justify-center gap-2">
+              <p className="text-[9.5px] text-gray-600 font-medium">
+                Updated: {new Date(lbUpdatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </p>
+              <button onClick={() => setLbRetryKey(k => k + 1)} disabled={lbLoading} className="text-[9.5px] text-yellow-500/80 hover:text-yellow-400 underline font-bold transition-all disabled:opacity-40">
+                {lbLoading ? "Refreshing..." : "Refresh Now"}
+              </button>
+            </div>
+          )}
         </div>
       )}
 
       {activeTab === "rewards" && (
-        <div className="max-w-sm mx-auto px-4 pt-4 pb-8 space-y-4">
-          {/* Referral Section */}
-          {(() => {
-            const pendingRefWei  = (pendingRefData as bigint | undefined) ?? BigInt(0);
-            const hasPending     = pendingRefWei > BigInt(0);
-            const pendingFmt     = hasPending ? formatUnits(pendingRefWei, 18).replace(/\.(\d{0,0})\d*$/, "") : "0";
-            const isClaimBusy    = isRefClaimPending || isRefClaimLoading;
-            return (
-              <div className="bg-white/4 border border-purple-700/30 rounded-2xl p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-purple-300 font-black text-sm">🔗 Invite Friends</p>
-                    <p className="text-gray-500 text-[10px] mt-0.5">Share your link — tracked automatically</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-purple-400 font-black text-xl leading-none">
-                      {refLoading ? "…" : (refCount ?? 0)}
-                    </p>
-                    <p className="text-gray-600 text-[9px] uppercase tracking-wider">Friends</p>
-                  </div>
-                </div>
-
-                {isConnected && address ? (
-                  <>
-                    <div className="bg-black/30 border border-white/8 rounded-xl px-3 py-2 flex items-center gap-2">
-                      <p className="text-gray-400 text-[10px] flex-1 truncate font-mono">
-                        {APP_URL}?ref={address.slice(0, 8)}…
-                      </p>
-                      <button onClick={handleCopyRefLink}
-                        className="shrink-0 text-[10px] font-bold px-2.5 py-1 rounded-full transition-all active:scale-95"
-                        style={{
-                          background: refCopied ? "rgba(16,185,129,0.2)" : "rgba(124,58,237,0.2)",
-                          border: refCopied ? "1px solid rgba(16,185,129,0.5)" : "1px solid rgba(124,58,237,0.4)",
-                          color: refCopied ? "#6ee7b7" : "#c4b5fd"
-                        }}>
-                        {refCopied ? "✅ Copied!" : "📋 Copy"}
-                      </button>
-                    </div>
-
-                    <div className="grid grid-cols-3 gap-1.5 text-center">
-                      {[
-                        { range: "1–5",  reward: "5K",  color: "#a78bfa" },
-                        { range: "6–10", reward: "8K",  color: "#818cf8" },
-                        { range: "11+",  reward: "12K", color: "#6366f1" },
-                      ].map(t => (
-                        <div key={t.range} className="bg-white/4 border border-white/8 rounded-xl py-2">
-                          <p className="font-black text-xs" style={{ color: t.color }}>{t.reward} $TYSM</p>
-                          <p className="text-gray-600 text-[9px]">per ref ({t.range})</p>
-                        </div>
-                      ))}
-                    </div>
-
-                    {referralReady && (
-                      <div className="flex items-center justify-between bg-black/20 border border-purple-800/30 rounded-xl px-3 py-2.5">
-                        <div>
-                          <p className="text-gray-500 text-[9px] uppercase tracking-wider">Claimable Reward</p>
-                          <p className="text-purple-300 font-black text-base leading-tight">
-                            {hasPending ? `${Number(pendingFmt).toLocaleString()} $TYSM` : "—"}
-                          </p>
-                        </div>
-                        <button
-                          disabled={!hasPending || isClaimBusy}
-                          onClick={() => writeRefClaim({ address: REFERRAL_ADDRESS, abi: REFERRAL_ABI, functionName: "claimRewards", chainId: base.id })}
-                          className="text-[11px] font-bold px-3 py-1.5 rounded-full transition-all active:scale-95 disabled:opacity-40"
-                          style={{ background: hasPending ? "rgba(124,58,237,0.3)" : "rgba(255,255,255,0.05)", border: "1px solid rgba(124,58,237,0.4)", color: "#c4b5fd" }}>
-                          {isClaimBusy ? "Claiming…" : "Claim 🎁"}
-                        </button>
-                      </div>
-                    )}
-
-                    <p className="text-gray-600 text-[10px] text-center leading-relaxed">
-                      When your friend opens the app via your link → tracked automatically
-                    </p>
-                  </>
-                ) : (
-                  <p className="text-gray-600 text-[11px] text-center py-1">
-                    🔌 Connect your wallet to see your referral link
-                  </p>
-                )}
-              </div>
-            );
-          })()}
-
-          {/* Monthly Lucky Draw Banner */}
-          <div style={{
-            background: "linear-gradient(135deg,#92400e 0%,#78350f 50%,#451a03 100%)",
-            border: "1px solid rgba(245,158,11,0.55)",
-            boxShadow: "0 0 24px rgba(245,158,11,0.12)"
-          }} className="rounded-2xl p-4 space-y-3">
-            <p className="text-center text-base font-black text-yellow-300 leading-snug">
-              🎁 TYSM Daily Faucet<br/>Monthly Rewards! 🎁
-            </p>
-            <p className="text-center text-yellow-100/75 text-xs leading-relaxed">
-              To celebrate, I'm launching a special lucky draw at the end of this month for{" "}
-              <span className="text-yellow-300 font-bold">3 lucky users!</span>
-            </p>
-            <div className="grid grid-cols-3 gap-2">
-              <div className="prize-gold rounded-xl p-2.5 text-center">
-                <p className="text-xl">🥇</p>
-                <p className="text-yellow-300 font-black text-sm mt-0.5">$3.5</p>
-                <p className="text-yellow-600 text-[10px]">1st Prize</p>
-              </div>
-              <div className="prize-silver rounded-xl p-2.5 text-center">
-                <p className="text-xl">🥈</p>
-                <p className="text-gray-200 font-black text-sm mt-0.5">$2.5</p>
-                <p className="text-gray-500 text-[10px]">2nd Prize</p>
-              </div>
-              <div className="prize-bronze rounded-xl p-2.5 text-center">
-                <p className="text-xl">🥉</p>
-                <p className="text-orange-300 font-black text-sm mt-0.5">$1.0</p>
-                <p className="text-orange-600 text-[10px]">3rd Prize</p>
-              </div>
-            </div>
-            <p className="text-center text-yellow-700 text-[10px]">Winner drawn at end of month · Must have claimed at least once</p>
+        <div className="max-w-sm mx-auto px-4 pt-5 pb-8 space-y-4">
+          <div className="text-center mb-1">
+            <h2 className="text-xl font-black text-purple-400 tracking-wide">REWARDS HUB</h2>
+            <p className="text-gray-500 text-[10px] uppercase tracking-widest mt-0.5">Bonus Pools & Ecosystem Milestones</p>
           </div>
 
-          {/* Reward Structure */}
-          <div>
-            <h3 className="text-center text-xs font-black text-gray-400 uppercase tracking-widest mb-3">Daily Reward Structure</h3>
-            <div className="space-y-3">
-              <div className="bg-white/4 border border-yellow-500/25 rounded-2xl overflow-hidden">
-                <div className="bg-yellow-500/10 px-3 py-2.5 flex items-center justify-between">
-                  <span className="text-yellow-400 font-black text-xs">🥉 Daily Faucet · 30-Day Cycle (Repeats)</span>
-                  <span className="text-yellow-300 font-bold text-xs">2,000 / day</span>
-                </div>
-                <div className="divide-y divide-white/5">
-                  {[
-                    { day: 7,  label: "🔥 Week 1",     bonus: "+10K" },
-                    { day: 15, label: "🌟 Mid Month",  bonus: "+40K" },
-                    { day: 30, label: "👑 Full Month",  bonus: "+90K" },
-                  ].map(m => (
-                    <div key={m.day} className="grid grid-cols-3 px-3 py-2 text-[11px]">
-                      <span className="text-gray-500">Day {m.day}</span>
-                      <span className="text-gray-300 text-center">{m.label}</span>
-                      <span className="text-green-400 font-bold text-right">{m.bonus}</span>
-                    </div>
-                  ))}
-                </div>
-              <div className="bg-white/4 border border-emerald-500/25 rounded-2xl overflow-hidden">
-                  <div className="bg-emerald-500/10 px-3 py-2.5 flex items-center justify-between">
-                    <span className="text-emerald-300 font-black text-xs">🎁 Special Loyalty Bonus Pool · Planned</span>
-                    <span className="text-emerald-400 font-bold text-xs">One-time · Separate</span>
-                  </div>
-                  <div className="divide-y divide-white/5">
-                    {[
-                      { day: 45, label: "🌟 C2 Bonus",  bonus: "+80K"  },
-                      { day: 60, label: "👑 C2 Bonus",  bonus: "+180K" },
-                    ].map(m => (
-                      <div key={m.day} className="grid grid-cols-3 px-3 py-2 text-[11px]">
-                        <span className="text-gray-500">Day {m.day}</span>
-                                                                <p className="text-gray-600 text-[9.5px] leading-snug">
-                      Not paid by the daily faucet contract · Each milestone claimed once · Unlock
-                    </p>
-                  </div>
-                </div>
+          {/* Referral Reward Claims */}
+          <div className="bg-white/4 border border-white/5 rounded-2xl p-4 relative overflow-hidden">
+            <p className="text-gray-500 text-[9px] uppercase tracking-widest font-black mb-0.5">Referral Earnings Pool</p>
+            <div className="flex justify-between items-baseline mb-3">
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-3xl font-black text-purple-400">
+                  {pendingRefData ? formatAmount(pendingRefData) : "0"}
+                </span>
+                <span className="text-gray-500 text-xs font-bold">$TYSM</span>
               </div>
+              <div className="text-right">
+                <p className="text-gray-500 text-[9px] uppercase tracking-widest mb-0.5">Total Invited</p>
+                <p className="text-white font-black text-sm">
+                  {refLoading ? "..." : refCount !== null ? `${refCount} users` : "—"}
+                </p>
+              </div>
+            </div>
 
-              <div className="bg-white/4 border border-purple-400/25 rounded-2xl overflow-hidden">
-                <div className="bg-purple-400/10 px-3 py-2.5 flex items-center justify-between">
-                  <span className="text-purple-300 font-black text-xs">✨ C3 / C4 Phases · Coming Later</span>
-                  <span className="text-purple-400 font-bold text-xs">Planned</span>
-                </div>
-                               <div className="px-3 py-3">
-                  <p className="text-gray-600 text-[9.5px] leading-snug text-center">
-                    Future Special Loyalty Bonus phases for long-term claimers · Milestones and dates TBD · Support fee may apply
+            <div className="pt-1.5">
+              <button onClick={() => writeRefClaim?.({ address: REFERRAL_ADDRESS, abi: REFERRAL_ABI, functionName: "claimRewards", chainId: base.id })} disabled={isRefClaimPending || isRefClaimLoading || !pendingRefData || pendingRefData === 0n}
+                className="w-full bg-purple-500 hover:bg-purple-600 text-white font-black py-3 px-4 rounded-xl text-xs uppercase tracking-widest transition-all disabled:opacity-40 disabled:pointer-events-none shadow-[0_4px_12px_rgba(139,92,246,0.15)]">
+                {isRefClaimPending ? "✍️ APPROVE IN WALLET..." : isRefClaimLoading ? "⏳ CLAIMING REWARDS..." : "🎁 CLAIM REFERRAL BALANCE"}
+              </button>
+            </div>
+
+            <div className="mt-3.5 pt-3 border-t border-white/5 flex flex-col gap-1.5">
+              <p className="text-gray-500 text-[10px] leading-normal">
+                Your unique invitation link for tracking and rewards:
+              </p>
+              <button onClick={handleCopyRefLink} className="w-full bg-white/5 border border-white/5 hover:bg-white/10 text-purple-300 font-mono text-[10px] py-2 px-3 rounded-lg transition-all text-left truncate flex items-center justify-between">
+                <span className="truncate">{address ? `${APP_URL}?ref=${address.slice(0,6)}...` : APP_URL}</span>
+                <span className="text-purple-400 font-bold uppercase text-[9px] ml-2 shrink-0">
+                  {refCopied ? "Copied!" : "Copy"}
+                </span>
+              </button>
+            </div>
+          </div>
+
+          {/* Detailed Program Structure */}
+          <div className="space-y-2.5">
+            <h3 className="text-[10px] font-black text-gray-500 uppercase tracking-widest pl-1">Program Details</h3>
+
+            <div className="bg-white/4 border border-white/5 rounded-2xl p-3.5 space-y-3">
+              <div className="flex items-start gap-3">
+                <div className="w-7 h-7 rounded-xl bg-yellow-500/10 border border-yellow-500/20 flex items-center justify-center text-xs font-bold text-yellow-400 shrink-0 mt-0.5">📅</div>
+                <div>
+                  <h4 className="text-white font-black text-xs">Daily Reward Structure</h4>
+                  <p className="text-gray-500 text-[11px] leading-normal mt-0.5">
+                    Standard rate of <span className="text-yellow-400/90 font-bold">2,000 $TYSM</span> per day. Milestone multipliers unlock automatically at set day counts within your 30-day cycle.
                   </p>
                 </div>
               </div>
 
+              <div className="border-t border-white/5 pt-3 flex items-start gap-3">
+                <div className="w-7 h-7 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-xs font-bold text-amber-400 shrink-0 mt-0.5">🔥</div>
+                <div>
+                  <h4 className="text-white font-black text-xs">Special Loyalty Bonus Pool · Planned</h4>
+                  <p className="text-gray-500 text-[11px] leading-normal mt-0.5">
+                    Separate one-time milestone claims available to long-term claimers who maintain high streaks across month rollouts.
+                  </p>
+                  <p className="text-gray-600 text-[9.5px] leading-snug">
+                    Not paid by the daily faucet contract · Each milestone claimed once · Unlock
+                  </p>
+                </div>
+              </div>
             </div>
+
+            <div className="bg-white/4 border border-purple-400/25 rounded-2xl overflow-hidden">
+              <div className="bg-purple-400/10 px-3 py-2.5 flex items-center justify-between">
+                <span className="text-purple-300 font-black text-xs">✨ C3 / C4 Phases · Coming Later</span>
+                <span className="text-purple-400 font-bold text-xs">Planned</span>
+              </div>
+              <div className="px-3 py-3">
+                <p className="text-gray-600 text-[9.5px] leading-snug text-center">
+                  Future Special Loyalty Bonus phases for long-term claimers · Milestones and dates TBD · Support fee may apply
+                </p>
+              </div>
+            </div>
+
           </div>
+
+          <p className="text-gray-700 text-[9px] text-center mt-3">
+            Daily faucet cycle repeats every 30 days · Special Loyalty Bonuses are separate one-time claims
+          </p>
         </div>
-
-        <p className="text-gray-700 text-[9px] text-center mt-3">
-          Daily faucet cycle repeats every 30 days · Special Loyalty Bonuses are separate one-time claims
-        </p>
-      </div>
-    )}
+      )}
 
       {activeTab === "board" && (
-
         <div className="fixed bottom-0 left-0 right-0 z-50 leaderboard-me px-4 py-2.5 backdrop-blur-sm">
           <div className="max-w-sm mx-auto grid grid-cols-12 gap-1 items-center">
             <p className="col-span-1 text-yellow-400 font-black text-sm">{myRank ? `#${myRank}` : "—"}</p>
@@ -1367,14 +1160,26 @@ export default function Home() {
               {(cycleInfo.baseRate/1000).toFixed(0)}K
             </p>
             <div className="col-span-3 flex justify-center">
-              <span className="text-[9px] font-bold rounded-full px-1.5 py-0.5"
-                style={{ color: heartColor(hearts), background: heartBg(hearts), border: `1px solid ${heartColor(hearts)}40` }}>
-                {hearts}/3
+              <span className="text-[9px] font-bold rounded-full px-1.5 py-0.5 tracking-wider uppercase text-center truncate max-w-full"
+                style={{
+                  color: myRank && myRank <= 3 ? '#fcd34d' : '#9ca3af',
+                  border: `1px solid ${myRank && myRank <= 3 ? '#f59e0b50' : '#ffffff15'}`,
+                  background: myRank && myRank <= 3 ? '#f59e0b15' : '#ffffff05'
+                }}>
+                {myRank ? (myRank <= 3 ? "PRO CLAIMER" : "ACTIVE") : "UNRANKED"}
               </span>
             </div>
           </div>
         </div>
       )}
+
+      {/* Monthly Reset Global Counter Banner */}
+      <div className="max-w-sm mx-auto px-4 pb-20 text-center text-gray-600 text-[10px] font-medium tracking-wide space-y-1">
+        <p className="uppercase tracking-[0.2em] text-gray-500/80">Ecosystem Cycle Counter</p>
+        <p className="font-mono text-gray-400">
+          {mDays}d {mHrs}h {mMins}m {mSecs}s until next monthly update
+        </p>
+      </div>
     </main>
   );
 }
