@@ -1322,7 +1322,7 @@ export default function Home() {
                     ].map(m => (
                       <div key={m.day} className="grid grid-cols-3 px-3 py-2 text-[11px]">
                         <span className="text-gray-500">Day {m.day}</span>
-                                            <p className="text-gray-600 text-[9.5px] leading-snug">
+                                                                <p className="text-gray-600 text-[9.5px] leading-snug">
                       Not paid by the daily faucet contract · Each milestone claimed once · Unlock
                     </p>
                   </div>
@@ -1334,20 +1334,22 @@ export default function Home() {
                   <span className="text-purple-300 font-black text-xs">✨ C3 / C4 Phases · Coming Later</span>
                   <span className="text-purple-400 font-bold text-xs">Planned</span>
                 </div>
-                <div className="px-3 py-3">
+                               <div className="px-3 py-3">
                   <p className="text-gray-600 text-[9.5px] leading-snug text-center">
                     Future Special Loyalty Bonus phases for long-term claimers · Milestones and dates TBD · Support fee may apply
                   </p>
                 </div>
               </div>
 
-              <p className="text-gray-700 text-[9px] text-center mt-3">
-                Daily faucet cycle repeats every 30 days · Special Loyalty Bonuses are separate one-time claims
-              </p>
             </div>
           </div>
         </div>
-      )}
+
+        <p className="text-gray-700 text-[9px] text-center mt-3">
+          Daily faucet cycle repeats every 30 days · Special Loyalty Bonuses are separate one-time claims
+        </p>
+      </div>
+    )}
 
       {activeTab === "board" && (
 
