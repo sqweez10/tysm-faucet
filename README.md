@@ -1,6 +1,6 @@
 ### ⚡ TYSM Daily Faucet Mini-App (Updated)
 
-A gamified Web3 SocialFi Mini-App built for the Farcaster ecosystem, deployed on the Base network. This application incentivizes community engagement through a structured daily token distribution l[...]
+A gamified Web3 SocialFi Mini-App built for the Farcaster ecosystem, deployed on the Base network. This application incentivizes community engagement through a structured daily token distribution loop, milestone rewards, and social sharing.
 
 ## 📊 Reward Structure (Verified On-Chain Behavior)
 
@@ -54,7 +54,6 @@ daily faucet above.
 
 This system is still in development. Details above may be adjusted before
 launch — this section will be updated once it's live.
-```
 
 ## 🛠️ Tech Stack
 
@@ -66,4 +65,5 @@ launch — this section will be updated once it's live.
 * **Blockchain:** Base Network (Ethereum L2)
 
 ---
+
 Developed with 🔥 by **tops87sqweezz.base.eth**
