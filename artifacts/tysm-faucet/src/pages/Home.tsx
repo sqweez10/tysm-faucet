@@ -1255,39 +1255,6 @@ export default function Home() {
             );
           })()}
 
-          {/* Monthly Lucky Draw Banner */}
-          <div style={{
-            background: "linear-gradient(135deg,#92400e 0%,#78350f 50%,#451a03 100%)",
-            border: "1px solid rgba(245,158,11,0.55)",
-            boxShadow: "0 0 24px rgba(245,158,11,0.12)"
-          }} className="rounded-2xl p-4 space-y-3">
-            <p className="text-center text-base font-black text-yellow-300 leading-snug">
-              🎁 TYSM Daily Faucet<br/>Monthly Rewards! 🎁
-            </p>
-            <p className="text-center text-yellow-100/75 text-xs leading-relaxed">
-              To celebrate, I'm launching a special lucky draw at the end of this month for{" "}
-              <span className="text-yellow-300 font-bold">3 lucky users!</span>
-            </p>
-            <div className="grid grid-cols-3 gap-2">
-              <div className="prize-gold rounded-xl p-2.5 text-center">
-                <p className="text-xl">🥇</p>
-                <p className="text-yellow-300 font-black text-sm mt-0.5">$3.5</p>
-                <p className="text-yellow-600 text-[10px]">1st Prize</p>
-              </div>
-              <div className="prize-silver rounded-xl p-2.5 text-center">
-                <p className="text-xl">🥈</p>
-                <p className="text-gray-200 font-black text-sm mt-0.5">$2.5</p>
-                <p className="text-gray-500 text-[10px]">2nd Prize</p>
-              </div>
-              <div className="prize-bronze rounded-xl p-2.5 text-center">
-                <p className="text-xl">🥉</p>
-                <p className="text-orange-300 font-black text-sm mt-0.5">$1.0</p>
-                <p className="text-orange-600 text-[10px]">3rd Prize</p>
-              </div>
-            </div>
-            <p className="text-center text-yellow-700 text-[10px]">Winner drawn at end of month · Must have claimed at least once</p>
-          </div>
-
           {/* Reward Structure */}
           <div>
             <h3 className="text-center text-xs font-black text-gray-400 uppercase tracking-widest mb-3">Daily Reward Structure</h3>
