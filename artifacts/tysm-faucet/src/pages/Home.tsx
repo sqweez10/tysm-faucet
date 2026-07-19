@@ -1255,6 +1255,29 @@ export default function Home() {
             );
           })()}
 
+          {/* TYSM Faucet V2 Notice — informational only, no logic/claim impact */}
+          <div className="bg-amber-900/20 border border-amber-700/30 rounded-2xl p-4 space-y-2">
+            <p className="text-amber-300 text-sm font-black flex items-center gap-1.5">
+              <span className="text-base leading-none">⚠️</span> TYSM Faucet V2 Notice
+            </p>
+            <p className="text-amber-100/80 text-[11px] leading-relaxed">
+              The current faucet is working as designed on-chain, but I found repeated
+              multi-wallet farming using smart wallets / Account Abstraction bundles.
+            </p>
+            <p className="text-amber-100/80 text-[11px] leading-relaxed">
+              To protect real users, I will stop refilling the current V2 faucet while
+              preparing TYSM Faucet V3 with stronger anti-abuse protection.
+            </p>
+            <p className="text-amber-100/80 text-[11px] leading-relaxed">
+              Your existing on-chain history — totalDays, streak, and totalClaimed —
+              remains on-chain. I will try to preserve loyal users&rsquo; history in V3
+              where possible.
+            </p>
+            <p className="text-amber-300/90 text-[11px] leading-relaxed">
+              Thank you for using TYSM fairly. 🙏
+            </p>
+          </div>
+          
           {/* Reward Structure */}
           <div>
             <h3 className="text-center text-xs font-black text-gray-400 uppercase tracking-widest mb-3">Daily Reward Structure</h3>
