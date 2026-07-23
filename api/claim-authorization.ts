@@ -8,6 +8,15 @@ const BASE_SEPOLIA_CHAIN_ID = 84532;
 
 const SUPPORTED_CHAIN_IDS = new Set([BASE_CHAIN_ID, BASE_SEPOLIA_CHAIN_ID]);
 
+const SHARE_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
+
+const SHARE_MARKERS = [
+  "#tysmfaucet",
+  "tysm-faucet",
+  "tysm-faucet.vercel.app",
+  "@tops87sqweezz.base.eth",
+];
+
 type ClaimAuthorizationRequestBody = {
   fid?: unknown;
   wallet?: unknown;
@@ -26,6 +35,29 @@ type ChainConfig = {
 type AppConfig = {
   chain: ChainConfig;
   neynarApiKey: string;
+};
+
+type NeynarCastAuthor = {
+  fid?: number;
+};
+
+type NeynarCast = {
+  hash?: string;
+  text?: string;
+  timestamp?: string;
+  created_at?: string;
+  author?: NeynarCastAuthor;
+};
+
+type NeynarCastResponse = {
+  cast?: NeynarCast;
+} & NeynarCast;
+
+type VerifiedCast = {
+  hash: string;
+  authorFid: number;
+  text: string;
+  timestamp: string | null;
 };
 
 type SafeErrorCode =
@@ -266,6 +298,145 @@ function validateRequestBody(body: ClaimAuthorizationRequestBody):
   };
 }
 
+function getCastFromNeynarResponse(json: NeynarCastResponse): NeynarCast | null {
+  if (json.cast && typeof json.cast === "object") {
+    return json.cast;
+  }
+
+  if (json.hash || json.author || json.text) {
+    return json;
+  }
+
+  return null;
+}
+
+function castHasRequiredMarker(text: string): boolean {
+  const normalizedText = text.toLowerCase();
+
+  return SHARE_MARKERS.some((marker) => normalizedText.includes(marker));
+}
+
+function isRecentCast(timestamp: string | null): boolean {
+  if (!timestamp) {
+    return false;
+  }
+
+  const createdAtMs = Date.parse(timestamp);
+  if (!Number.isFinite(createdAtMs)) {
+    return false;
+  }
+
+  const ageMs = Date.now() - createdAtMs;
+  if (ageMs < 0) {
+    return false;
+  }
+
+  return ageMs <= SHARE_MAX_AGE_SECONDS * 1000;
+}
+
+async function fetchCastByHash(
+  apiKey: string,
+  castHash: string
+): Promise<VerifiedCast | null> {
+  const url =
+    "https://api.neynar.com/v2/farcaster/cast/" +
+    `?identifier=${encodeURIComponent(castHash)}` +
+    "&type=hash";
+
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      accept: "application/json",
+      api_key: apiKey,
+    },
+  });
+
+  if (!response.ok) {
+    return null;
+  }
+
+  const json = (await response.json()) as NeynarCastResponse;
+  const cast = getCastFromNeynarResponse(json);
+
+  if (!cast) {
+    return null;
+  }
+
+  const authorFid = cast.author?.fid;
+  const text = typeof cast.text === "string" ? cast.text : "";
+  const timestamp =
+    typeof cast.timestamp === "string"
+      ? cast.timestamp
+      : typeof cast.created_at === "string"
+        ? cast.created_at
+        : null;
+
+  if (!authorFid || typeof authorFid !== "number") {
+    return null;
+  }
+
+  return {
+    hash: typeof cast.hash === "string" ? cast.hash.toLowerCase() : castHash,
+    authorFid,
+    text,
+    timestamp,
+  };
+}
+
+async function verifyShareCast(params: {
+  apiKey: string;
+  castHash: string;
+  fid: number;
+}): Promise<
+  | {
+      ok: true;
+      cast: VerifiedCast;
+    }
+  | {
+      ok: false;
+      internalReason:
+        | "cast_not_found"
+        | "author_mismatch"
+        | "cast_not_recent"
+        | "missing_marker";
+    }
+> {
+  const cast = await fetchCastByHash(params.apiKey, params.castHash);
+
+  if (!cast) {
+    return {
+      ok: false,
+      internalReason: "cast_not_found",
+    };
+  }
+
+  if (cast.authorFid !== params.fid) {
+    return {
+      ok: false,
+      internalReason: "author_mismatch",
+    };
+  }
+
+  if (!isRecentCast(cast.timestamp)) {
+    return {
+      ok: false,
+      internalReason: "cast_not_recent",
+    };
+  }
+
+  if (!castHasRequiredMarker(cast.text)) {
+    return {
+      ok: false,
+      internalReason: "missing_marker",
+    };
+  }
+
+  return {
+    ok: true,
+    cast,
+  };
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   setCorsHeaders(res);
 
@@ -306,17 +477,40 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       );
     }
 
-    console.info("[claim-authorization] validated request and app config", {
+    const shareVerification = await verifyShareCast({
+      apiKey: appConfig.neynarApiKey,
+      castHash: validation.castHash,
+      fid: validation.fid,
+    });
+
+    if (!shareVerification.ok) {
+      console.info("[claim-authorization] share verification failed", {
+        fid: validation.fid,
+        wallet: validation.wallet,
+        castHash: validation.castHash,
+        chainId: appConfig.chain.chainId,
+        reason: shareVerification.internalReason,
+      });
+
+      return sendError(
+        res,
+        400,
+        "share_not_found",
+        "Please share your TYSM streak before claiming."
+      );
+    }
+
+    console.info("[claim-authorization] validated request, config, and share", {
       fid: validation.fid,
       wallet: validation.wallet,
       castHash: validation.castHash,
+      castAuthorFid: shareVerification.cast.authorFid,
       client: validation.client,
       chainId: appConfig.chain.chainId,
       chainName: appConfig.chain.chainName,
       contractAddress: appConfig.chain.contractAddress,
       signerAddress: appConfig.chain.signerAddress,
-      hasNeynarApiKey: Boolean(appConfig.neynarApiKey),
-      stage: "neynar-config-validation-only",
+      stage: "neynar-cast-verification-only",
     });
 
     return sendError(
