@@ -53,6 +53,26 @@ type NeynarCastResponse = {
   cast?: NeynarCast;
 } & NeynarCast;
 
+type NeynarVerifiedAddresses = {
+  eth_addresses?: string[];
+  sol_addresses?: string[];
+  primary?: {
+    eth_address?: string;
+    sol_address?: string;
+  };
+};
+
+type NeynarUser = {
+  fid?: number;
+  custody_address?: string;
+  verified_addresses?: NeynarVerifiedAddresses;
+};
+
+type NeynarUserResponse = {
+  user?: NeynarUser;
+  users?: NeynarUser[];
+};
+
 type VerifiedCast = {
   hash: string;
   authorFid: number;
@@ -437,6 +457,111 @@ async function verifyShareCast(params: {
   };
 }
 
+function getUserFromNeynarResponse(json: NeynarUserResponse): NeynarUser | null {
+  if (json.user && typeof json.user === "object") {
+    return json.user;
+  }
+
+  if (Array.isArray(json.users) && json.users.length > 0) {
+    return json.users[0] ?? null;
+  }
+
+  return null;
+}
+
+function collectUserEthAddresses(user: NeynarUser): string[] {
+  const addresses = new Set<string>();
+
+  if (isValidEthAddress(user.custody_address)) {
+    addresses.add(normalizeAddress(user.custody_address));
+  }
+
+  const verified = user.verified_addresses;
+
+  if (Array.isArray(verified?.eth_addresses)) {
+    for (const address of verified.eth_addresses) {
+      if (isValidEthAddress(address)) {
+        addresses.add(normalizeAddress(address));
+      }
+    }
+  }
+
+  if (isValidEthAddress(verified?.primary?.eth_address)) {
+    addresses.add(normalizeAddress(verified.primary.eth_address));
+  }
+
+  return [...addresses];
+}
+
+async function fetchUserByFid(
+  apiKey: string,
+  fid: number
+): Promise<NeynarUser | null> {
+  const url =
+    "https://api.neynar.com/v2/farcaster/user/bulk" +
+    `?fids=${encodeURIComponent(String(fid))}`;
+
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      accept: "application/json",
+      api_key: apiKey,
+    },
+  });
+
+  if (!response.ok) {
+    return null;
+  }
+
+  const json = (await response.json()) as NeynarUserResponse;
+  const user = getUserFromNeynarResponse(json);
+
+  if (!user || user.fid !== fid) {
+    return null;
+  }
+
+  return user;
+}
+
+async function verifyWalletFidAssociation(params: {
+  apiKey: string;
+  fid: number;
+  wallet: string;
+}): Promise<
+  | {
+      ok: true;
+      matchedAddress: string;
+    }
+  | {
+      ok: false;
+      internalReason: "user_not_found" | "wallet_not_associated";
+    }
+> {
+  const user = await fetchUserByFid(params.apiKey, params.fid);
+
+  if (!user) {
+    return {
+      ok: false,
+      internalReason: "user_not_found",
+    };
+  }
+
+  const wallet = normalizeAddress(params.wallet);
+  const userAddresses = collectUserEthAddresses(user);
+
+  if (!userAddresses.includes(wallet)) {
+    return {
+      ok: false,
+      internalReason: "wallet_not_associated",
+    };
+  }
+
+  return {
+    ok: true,
+    matchedAddress: wallet,
+  };
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   setCorsHeaders(res);
 
@@ -477,6 +602,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       );
     }
 
+    const walletVerification = await verifyWalletFidAssociation({
+      apiKey: appConfig.neynarApiKey,
+      fid: validation.fid,
+      wallet: validation.wallet,
+    });
+
+    if (!walletVerification.ok) {
+      console.info("[claim-authorization] wallet/FID verification failed", {
+        fid: validation.fid,
+        wallet: validation.wallet,
+        chainId: appConfig.chain.chainId,
+        reason: walletVerification.internalReason,
+      });
+
+      return sendError(
+        res,
+        400,
+        "wallet_fid_mismatch",
+        "This wallet could not be verified for this account."
+      );
+    }
+
     const shareVerification = await verifyShareCast({
       apiKey: appConfig.neynarApiKey,
       castHash: validation.castHash,
@@ -500,9 +647,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       );
     }
 
-    console.info("[claim-authorization] validated request, config, and share", {
+    /**
+     * Stage 3C intentionally stops here.
+     *
+     * Implemented:
+     * - request validation
+     * - supported chain validation
+     * - environment-based chain config validation
+     * - contract address validation
+     * - signer address validation
+     * - NEYNAR_API_KEY presence validation
+     * - wallet/FID association verification
+     * - Neynar cast lookup by castHash
+     * - cast author FID check
+     * - cast recency check
+     * - cast marker check
+     *
+     * Not implemented yet:
+     * - used cast hash storage
+     * - rate limiting
+     * - denylist checks
+     * - nonce/deadline generation
+     * - EIP-712 signing
+     *
+     * This endpoint must not sign anything until those checks are added.
+     */
+    console.info("[claim-authorization] validated request, wallet, and share", {
       fid: validation.fid,
       wallet: validation.wallet,
+      matchedAddress: walletVerification.matchedAddress,
       castHash: validation.castHash,
       castAuthorFid: shareVerification.cast.authorFid,
       client: validation.client,
@@ -510,7 +683,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       chainName: appConfig.chain.chainName,
       contractAddress: appConfig.chain.contractAddress,
       signerAddress: appConfig.chain.signerAddress,
-      stage: "neynar-cast-verification-only",
+      stage: "wallet-and-share-verification-only",
     });
 
     return sendError(
