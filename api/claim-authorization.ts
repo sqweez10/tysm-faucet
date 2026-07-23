@@ -3,7 +3,10 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 const ETH_ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
 const FARCASTER_CAST_HASH_RE = /^0x[a-fA-F0-9]{40}$/;
 
-const SUPPORTED_CHAIN_IDS = new Set([8453, 84532]);
+const BASE_CHAIN_ID = 8453;
+const BASE_SEPOLIA_CHAIN_ID = 84532;
+
+const SUPPORTED_CHAIN_IDS = new Set([BASE_CHAIN_ID, BASE_SEPOLIA_CHAIN_ID]);
 
 type ClaimAuthorizationRequestBody = {
   fid?: unknown;
@@ -11,6 +14,13 @@ type ClaimAuthorizationRequestBody = {
   castHash?: unknown;
   client?: unknown;
   chainId?: unknown;
+};
+
+type ChainConfig = {
+  chainId: number;
+  chainName: "base" | "base-sepolia";
+  contractAddress: string;
+  signerAddress: string;
 };
 
 type SafeErrorCode =
@@ -41,6 +51,14 @@ function sendError(
 
 function normalizeWallet(wallet: string) {
   return wallet.trim().toLowerCase();
+}
+
+function normalizeAddress(address: string) {
+  return address.trim().toLowerCase();
+}
+
+function isValidEthAddress(value: unknown): value is string {
+  return typeof value === "string" && ETH_ADDRESS_RE.test(value);
 }
 
 function parsePositiveInteger(value: unknown): number | null {
@@ -91,6 +109,52 @@ function readBody(req: VercelRequest): ClaimAuthorizationRequestBody {
   }
 
   return {};
+}
+
+function readEnvAddress(name: string): string | null {
+  const value = process.env[name];
+
+  if (!isValidEthAddress(value)) {
+    return null;
+  }
+
+  return normalizeAddress(value);
+}
+
+function getChainConfig(chainId: number): ChainConfig | null {
+  if (chainId === BASE_CHAIN_ID) {
+    const contractAddress = readEnvAddress("TYSM_V3_BASE_CONTRACT_ADDRESS");
+    const signerAddress = readEnvAddress("TYSM_V3_BASE_SIGNER_ADDRESS");
+
+    if (!contractAddress || !signerAddress) {
+      return null;
+    }
+
+    return {
+      chainId: BASE_CHAIN_ID,
+      chainName: "base",
+      contractAddress,
+      signerAddress,
+    };
+  }
+
+  if (chainId === BASE_SEPOLIA_CHAIN_ID) {
+    const contractAddress = readEnvAddress("TYSM_V3_SEPOLIA_CONTRACT_ADDRESS");
+    const signerAddress = readEnvAddress("TYSM_V3_SEPOLIA_SIGNER_ADDRESS");
+
+    if (!contractAddress || !signerAddress) {
+      return null;
+    }
+
+    return {
+      chainId: BASE_SEPOLIA_CHAIN_ID,
+      chainName: "base-sepolia",
+      contractAddress,
+      signerAddress,
+    };
+  }
+
+  return null;
 }
 
 function validateRequestBody(body: ClaimAuthorizationRequestBody):
@@ -194,13 +258,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       );
     }
 
-    console.info("[claim-authorization] validated request", {
+    const chainConfig = getChainConfig(validation.chainId);
+
+    if (!chainConfig) {
+      console.error("[claim-authorization] missing or invalid chain config", {
+        chainId: validation.chainId,
+      });
+
+      return sendError(
+        res,
+        503,
+        "signing_unavailable",
+        "The claim service is temporarily unavailable. Please try again shortly."
+      );
+    }
+
+    console.info("[claim-authorization] validated request and config", {
       fid: validation.fid,
       wallet: validation.wallet,
       castHash: validation.castHash,
       client: validation.client,
-      chainId: validation.chainId,
-      stage: "validation-only",
+      chainId: chainConfig.chainId,
+      chainName: chainConfig.chainName,
+      contractAddress: chainConfig.contractAddress,
+      signerAddress: chainConfig.signerAddress,
+      stage: "config-validation-only",
     });
 
     return sendError(
