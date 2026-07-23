@@ -23,6 +23,11 @@ type ChainConfig = {
   signerAddress: string;
 };
 
+type AppConfig = {
+  chain: ChainConfig;
+  neynarApiKey: string;
+};
+
 type SafeErrorCode =
   | "invalid_request"
   | "unsupported_chain"
@@ -111,6 +116,16 @@ function readBody(req: VercelRequest): ClaimAuthorizationRequestBody {
   return {};
 }
 
+function readRequiredEnv(name: string): string | null {
+  const value = process.env[name];
+
+  if (typeof value !== "string" || value.trim().length === 0) {
+    return null;
+  }
+
+  return value.trim();
+}
+
 function readEnvAddress(name: string): string | null {
   const value = process.env[name];
 
@@ -155,6 +170,23 @@ function getChainConfig(chainId: number): ChainConfig | null {
   }
 
   return null;
+}
+
+function getAppConfig(chainId: number): AppConfig | null {
+  const chain = getChainConfig(chainId);
+  if (!chain) {
+    return null;
+  }
+
+  const neynarApiKey = readRequiredEnv("NEYNAR_API_KEY");
+  if (!neynarApiKey) {
+    return null;
+  }
+
+  return {
+    chain,
+    neynarApiKey,
+  };
 }
 
 function validateRequestBody(body: ClaimAuthorizationRequestBody):
@@ -258,11 +290,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       );
     }
 
-    const chainConfig = getChainConfig(validation.chainId);
+    const appConfig = getAppConfig(validation.chainId);
 
-    if (!chainConfig) {
-      console.error("[claim-authorization] missing or invalid chain config", {
+    if (!appConfig) {
+      console.error("[claim-authorization] missing or invalid app config", {
         chainId: validation.chainId,
+        hasNeynarApiKey: Boolean(process.env.NEYNAR_API_KEY),
       });
 
       return sendError(
@@ -273,16 +306,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       );
     }
 
-    console.info("[claim-authorization] validated request and config", {
+    console.info("[claim-authorization] validated request and app config", {
       fid: validation.fid,
       wallet: validation.wallet,
       castHash: validation.castHash,
       client: validation.client,
-      chainId: chainConfig.chainId,
-      chainName: chainConfig.chainName,
-      contractAddress: chainConfig.contractAddress,
-      signerAddress: chainConfig.signerAddress,
-      stage: "config-validation-only",
+      chainId: appConfig.chain.chainId,
+      chainName: appConfig.chain.chainName,
+      contractAddress: appConfig.chain.contractAddress,
+      signerAddress: appConfig.chain.signerAddress,
+      hasNeynarApiKey: Boolean(appConfig.neynarApiKey),
+      stage: "neynar-config-validation-only",
     });
 
     return sendError(
