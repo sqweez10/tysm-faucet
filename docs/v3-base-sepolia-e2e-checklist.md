@@ -508,5 +508,3 @@ This checklist does not include:
 - Frontend rewrite.
 - Public disclosure of anti-abuse thresholds.
 ````
-
----
