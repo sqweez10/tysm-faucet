@@ -675,6 +675,71 @@ async function checkRateLimits(params: {
   };
 }
 
+type DenylistResult =
+  | {
+      ok: true;
+    }
+  | {
+      ok: false;
+      internalReason: "wallet" | "fid" | "cast";
+    };
+
+function denylistKey(kind: "wallet" | "fid" | "cast", value: string | number) {
+  return `tysm:v3:deny:${kind}:${String(value).toLowerCase()}`;
+}
+
+async function isDenylisted(redis: Redis, key: string): Promise<boolean> {
+  const existing = await redis.get(key);
+  return existing !== null;
+}
+
+async function checkDenylist(params: {
+  redis: Redis;
+  fid: number;
+  wallet: string;
+  castHash: string;
+}): Promise<DenylistResult> {
+  const walletDenied = await isDenylisted(
+    params.redis,
+    denylistKey("wallet", params.wallet)
+  );
+
+  if (walletDenied) {
+    return {
+      ok: false,
+      internalReason: "wallet",
+    };
+  }
+
+  const fidDenied = await isDenylisted(
+    params.redis,
+    denylistKey("fid", params.fid)
+  );
+
+  if (fidDenied) {
+    return {
+      ok: false,
+      internalReason: "fid",
+    };
+  }
+
+  const castDenied = await isDenylisted(
+    params.redis,
+    denylistKey("cast", params.castHash)
+  );
+
+  if (castDenied) {
+    return {
+      ok: false,
+      internalReason: "cast",
+    };
+  }
+
+  return {
+    ok: true,
+  };
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   setCorsHeaders(res);
 
@@ -738,6 +803,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         429,
         "rate_limited",
         "Too many requests. Please slow down and try again shortly."
+      );
+    }
+
+    const denylist = await checkDenylist({
+      redis: appConfig.redis,
+      fid: validation.fid,
+      wallet: validation.wallet,
+      castHash: validation.castHash,
+    });
+
+    if (!denylist.ok) {
+      console.info("[claim-authorization] denylist rejected request", {
+        fid: validation.fid,
+        wallet: validation.wallet,
+        castHash: validation.castHash,
+        chainId: appConfig.chain.chainId,
+        reason: denylist.internalReason,
+      });
+
+      return sendError(
+        res,
+        403,
+        "not_eligible",
+        "Claim eligibility could not be verified right now. Please try again later or contact support."
       );
     }
 
@@ -808,7 +897,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     /**
-     * Stage 4B intentionally stops here.
+     * Stage 4C intentionally stops here.
      *
      * Implemented:
      * - request validation
@@ -819,6 +908,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
      * - NEYNAR_API_KEY presence validation
      * - Redis config validation
      * - basic Redis rate limiting
+     * - Redis denylist checks
      * - used cast hash check
      * - wallet/FID association verification
      * - Neynar cast lookup by castHash
@@ -827,14 +917,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
      * - cast marker check
      *
      * Not implemented yet:
-     * - denylist checks
      * - storing used cast hash
      * - nonce/deadline generation
      * - EIP-712 signing
      *
      * This endpoint must not sign anything until those checks are added.
      */
-    console.info("[claim-authorization] validated request, rate, cast reuse, wallet, and share", {
+    console.info("[claim-authorization] validated request, denylist, rate, cast reuse, wallet, and share", {
       fid: validation.fid,
       wallet: validation.wallet,
       matchedAddress: walletVerification.matchedAddress,
@@ -845,7 +934,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       chainName: appConfig.chain.chainName,
       contractAddress: appConfig.chain.contractAddress,
       signerAddress: appConfig.chain.signerAddress,
-      stage: "rate-limit-and-verification-only",
+      stage: "denylist-rate-and-verification-only",
     });
 
     return sendError(
