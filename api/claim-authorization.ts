@@ -11,6 +11,11 @@ const SUPPORTED_CHAIN_IDS = new Set([BASE_CHAIN_ID, BASE_SEPOLIA_CHAIN_ID]);
 
 const SHARE_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
 
+const RATE_LIMIT_WINDOW_SECONDS = 10 * 60;
+const RATE_LIMIT_MAX_PER_FID = 5;
+const RATE_LIMIT_MAX_PER_WALLET = 5;
+const RATE_LIMIT_MAX_PER_CAST = 3;
+
 const SHARE_MARKERS = [
   "#tysmfaucet",
   "tysm-faucet",
@@ -593,6 +598,83 @@ async function isCastAlreadyUsed(redis: Redis, castHash: string): Promise<boolea
   return existing !== null;
 }
 
+type RateLimitResult =
+  | {
+      ok: true;
+    }
+  | {
+      ok: false;
+      internalReason: "fid" | "wallet" | "cast";
+    };
+
+async function incrementRateLimit(params: {
+  redis: Redis;
+  key: string;
+  max: number;
+}): Promise<boolean> {
+  const count = await params.redis.incr(params.key);
+
+  if (count === 1) {
+    await params.redis.expire(params.key, RATE_LIMIT_WINDOW_SECONDS);
+  }
+
+  return count <= params.max;
+}
+
+function rateLimitKey(kind: "fid" | "wallet" | "cast", value: string | number) {
+  return `tysm:v3:rl:${kind}:${String(value).toLowerCase()}`;
+}
+
+async function checkRateLimits(params: {
+  redis: Redis;
+  fid: number;
+  wallet: string;
+  castHash: string;
+}): Promise<RateLimitResult> {
+  const fidOk = await incrementRateLimit({
+    redis: params.redis,
+    key: rateLimitKey("fid", params.fid),
+    max: RATE_LIMIT_MAX_PER_FID,
+  });
+
+  if (!fidOk) {
+    return {
+      ok: false,
+      internalReason: "fid",
+    };
+  }
+
+  const walletOk = await incrementRateLimit({
+    redis: params.redis,
+    key: rateLimitKey("wallet", params.wallet),
+    max: RATE_LIMIT_MAX_PER_WALLET,
+  });
+
+  if (!walletOk) {
+    return {
+      ok: false,
+      internalReason: "wallet",
+    };
+  }
+
+  const castOk = await incrementRateLimit({
+    redis: params.redis,
+    key: rateLimitKey("cast", params.castHash),
+    max: RATE_LIMIT_MAX_PER_CAST,
+  });
+
+  if (!castOk) {
+    return {
+      ok: false,
+      internalReason: "cast",
+    };
+  }
+
+  return {
+    ok: true,
+  };
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   setCorsHeaders(res);
 
@@ -632,6 +714,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         503,
         "signing_unavailable",
         "The claim service is temporarily unavailable. Please try again shortly."
+      );
+    }
+
+    const rateLimit = await checkRateLimits({
+      redis: appConfig.redis,
+      fid: validation.fid,
+      wallet: validation.wallet,
+      castHash: validation.castHash,
+    });
+
+    if (!rateLimit.ok) {
+      console.info("[claim-authorization] rate limited", {
+        fid: validation.fid,
+        wallet: validation.wallet,
+        castHash: validation.castHash,
+        chainId: appConfig.chain.chainId,
+        reason: rateLimit.internalReason,
+      });
+
+      return sendError(
+        res,
+        429,
+        "rate_limited",
+        "Too many requests. Please slow down and try again shortly."
       );
     }
 
@@ -702,7 +808,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     /**
-     * Stage 4A intentionally stops here.
+     * Stage 4B intentionally stops here.
      *
      * Implemented:
      * - request validation
@@ -712,6 +818,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
      * - signer address validation
      * - NEYNAR_API_KEY presence validation
      * - Redis config validation
+     * - basic Redis rate limiting
      * - used cast hash check
      * - wallet/FID association verification
      * - Neynar cast lookup by castHash
@@ -720,15 +827,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
      * - cast marker check
      *
      * Not implemented yet:
-     * - storing used cast hash
-     * - rate limiting
      * - denylist checks
+     * - storing used cast hash
      * - nonce/deadline generation
      * - EIP-712 signing
      *
      * This endpoint must not sign anything until those checks are added.
      */
-    console.info("[claim-authorization] validated request, cast reuse, wallet, and share", {
+    console.info("[claim-authorization] validated request, rate, cast reuse, wallet, and share", {
       fid: validation.fid,
       wallet: validation.wallet,
       matchedAddress: walletVerification.matchedAddress,
@@ -739,7 +845,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       chainName: appConfig.chain.chainName,
       contractAddress: appConfig.chain.contractAddress,
       signerAddress: appConfig.chain.signerAddress,
-      stage: "redis-used-cast-check-only",
+      stage: "rate-limit-and-verification-only",
     });
 
     return sendError(
