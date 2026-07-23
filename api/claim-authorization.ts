@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { Redis } from "@upstash/redis";
 import { randomBytes } from "crypto";
+import { privateKeyToAccount } from "viem/accounts";
 
 const ETH_ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
 const EVM_PRIVATE_KEY_RE = /^0x[a-fA-F0-9]{64}$/;
@@ -90,6 +91,12 @@ type VerifiedCast = {
   authorFid: number;
   text: string;
   timestamp: string | null;
+};
+
+type ClaimAuthorizationResponse = {
+  deadline: number;
+  nonce: `0x${string}`;
+  signature: `0x${string}`;
 };
 
 type SafeErrorCode =
@@ -299,6 +306,71 @@ function generateNonce(): `0x${string}` {
 
 function generateDeadline(nowSeconds = Math.floor(Date.now() / 1000)): number {
   return nowSeconds + AUTHORIZATION_TTL_SECONDS;
+}
+
+function getClaimAuthorizationDomain(chain: ChainConfig) {
+  return {
+    name: "TYSMFaucetV3",
+    version: "1",
+    chainId: chain.chainId,
+    verifyingContract: chain.contractAddress as `0x${string}`,
+  } as const;
+}
+
+const claimAuthorizationTypes = {
+  ClaimAuthorization: [
+    { name: "user", type: "address" },
+    { name: "deadline", type: "uint256" },
+    { name: "nonce", type: "bytes32" },
+  ],
+} as const;
+
+async function signClaimAuthorization(params: {
+  chain: ChainConfig;
+  user: string;
+  deadline: number;
+  nonce: `0x${string}`;
+}): Promise<
+  | {
+      ok: true;
+      signature: `0x${string}`;
+    }
+  | {
+      ok: false;
+      internalReason: "signer_mismatch" | "signing_failed";
+    }
+> {
+  try {
+    const account = privateKeyToAccount(params.chain.signerPrivateKey);
+
+    if (normalizeAddress(account.address) !== params.chain.signerAddress) {
+      return {
+        ok: false,
+        internalReason: "signer_mismatch",
+      };
+    }
+
+    const signature = await account.signTypedData({
+      domain: getClaimAuthorizationDomain(params.chain),
+      types: claimAuthorizationTypes,
+      primaryType: "ClaimAuthorization",
+      message: {
+        user: params.user as `0x${string}`,
+        deadline: BigInt(params.deadline),
+        nonce: params.nonce,
+      },
+    });
+
+    return {
+      ok: true,
+      signature,
+    };
+  } catch {
+    return {
+      ok: false,
+      internalReason: "signing_failed",
+    };
+  }
 }
 
 function validateRequestBody(body: ClaimAuthorizationRequestBody):
@@ -631,6 +703,23 @@ async function isCastAlreadyUsed(redis: Redis, castHash: string): Promise<boolea
   return existing !== null;
 }
 
+async function markCastUsed(params: {
+  redis: Redis;
+  castHash: string;
+  fid: number;
+  wallet: string;
+  chainId: number;
+  deadline: number;
+}): Promise<void> {
+  await params.redis.set(usedCastKey(params.castHash), {
+    fid: params.fid,
+    wallet: params.wallet,
+    chainId: params.chainId,
+    deadline: params.deadline,
+    usedAt: Math.floor(Date.now() / 1000),
+  });
+}
+
 type RateLimitResult =
   | {
       ok: true;
@@ -936,7 +1025,41 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const nonce = generateNonce();
     const deadline = generateDeadline();
 
-    console.info("[claim-authorization] validated request and prepared unsigned authorization", {
+    const signedAuthorization = await signClaimAuthorization({
+      chain: appConfig.chain,
+      user: validation.wallet,
+      deadline,
+      nonce,
+    });
+
+    if (!signedAuthorization.ok) {
+      console.error("[claim-authorization] signing failed", {
+        fid: validation.fid,
+        wallet: validation.wallet,
+        castHash: validation.castHash,
+        chainId: appConfig.chain.chainId,
+        signerAddress: appConfig.chain.signerAddress,
+        reason: signedAuthorization.internalReason,
+      });
+
+      return sendError(
+        res,
+        503,
+        "signing_unavailable",
+        "The claim service is temporarily unavailable. Please try again shortly."
+      );
+    }
+
+    await markCastUsed({
+      redis: appConfig.redis,
+      castHash: validation.castHash,
+      fid: validation.fid,
+      wallet: validation.wallet,
+      chainId: appConfig.chain.chainId,
+      deadline,
+    });
+
+    console.info("[claim-authorization] issued signed authorization", {
       fid: validation.fid,
       wallet: validation.wallet,
       matchedAddress: walletVerification.matchedAddress,
@@ -949,15 +1072,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       signerAddress: appConfig.chain.signerAddress,
       deadline,
       noncePreview: `${nonce.slice(0, 10)}...${nonce.slice(-6)}`,
-      stage: "nonce-deadline-no-signing",
+      stage: "signed-authorization-issued",
     });
 
-    return sendError(
-      res,
-      503,
-      "signing_unavailable",
-      "The claim service is temporarily unavailable. Please try again shortly."
-    );
+    const responseBody: ClaimAuthorizationResponse = {
+      deadline,
+      nonce,
+      signature: signedAuthorization.signature,
+    };
+
+    return res.status(200).json(responseBody);
   } catch (err) {
     console.error("[claim-authorization] unexpected error", err);
 
