@@ -48,6 +48,8 @@ NEYNAR_API_KEY=NEYNAR_TEST_API_KEY
 UPSTASH_REDIS_REST_URL=[https://your-test-db.upstash.io](https://your-test-db.upstash.io)
 UPSTASH_REDIS_REST_TOKEN=AxxxXXXXxxxxXXXXxxxxXXXX
 
+---
+
 3. Deployment Steps on Base Sepolia
 
 Step 3.1: Deploy MockTYSM Token
@@ -66,6 +68,8 @@ forge create --rpc-url [https://sepolia.base.org](https://sepolia.base.org) \
 
 Save the output Deployed to: address as <BASE_SEPOLIA_V3_CONTRACT>.
 
+---
+
 4. Fund the Faucet
 
 Mint or transfer MockTYSM tokens into the newly deployed TYSMFaucetV3 contract:
@@ -80,6 +84,8 @@ cast call <MOCK_TYSM_ADDRESS> \
   "balanceOf(address)(uint256)" <BASE_SEPOLIA_V3_CONTRACT> \
   --rpc-url [https://sepolia.base.org](https://sepolia.base.org)
 
+---
+
 5. Set Vercel Environment Variables
 
  * Go to Vercel Dashboard > Project Settings > Environment Variables.
@@ -91,6 +97,8 @@ cast call <MOCK_TYSM_ADDRESS> \
    * UPSTASH_REDIS_REST_URL = <UPSTASH_REDIS_REST_URL>
    * UPSTASH_REDIS_REST_TOKEN = <UPSTASH_REDIS_REST_TOKEN>
  * Redeploy the Vercel project or run locally using vc dev.
+
+---
 
 6. Example Authorization Request (curl)
 
@@ -105,6 +113,8 @@ curl -X POST "https://<YOUR_VERCEL_PREVIEW_URL>/api/claim-authorization" \
     "client": "e2e-test-runner"
   }'
 
+---
+
 7. Expected Success Response (HTTP 200)
 
 {
@@ -112,6 +122,8 @@ curl -X POST "https://<YOUR_VERCEL_PREVIEW_URL>/api/claim-authorization" \
   "nonce": "0xa1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90",
   "signature": "0x7f8a9b..."
 }
+
+---
 
 8. Execute On-Chain Claim (claimWithSignature)
 
@@ -123,6 +135,8 @@ cast send <BASE_SEPOLIA_V3_CONTRACT> \
   0x7f8a9b... \
   --rpc-url [https://sepolia.base.org](https://sepolia.base.org) \
   --private-key <CLAIMING_WALLET_PRIVATE_KEY>
+
+---
 
 9. Negative Testing Protocol
 
@@ -136,6 +150,8 @@ cast send <BASE_SEPOLIA_V3_CONTRACT> \
 | 9.6 | Expired Deadline | Call claimWithSignature after deadline timestamp has passed. | On-chain revert: SignatureExpired() |
 | 9.7 | Blocklisted Wallet | Add wallet to Upstash tysm:v3:deny:wallet:<address> and issue request. | HTTP 403: not_eligible |
 | 9.8 | Paused Faucet | Call pause() on contract via owner key, then execute claimWithSignature. | On-chain revert: EnforcedPause() |
+
+---
 
 10. Troubleshooting Section
 
@@ -154,3 +170,4 @@ C. API Error: share_not_found (400)
  * Cause: Neynar API indexing delay or cast age exceeded SHARE_MAX_AGE_SECONDS (7 days).
  * Solution: Ensure the test cast was posted within 7 days and contains #tysmfaucet.
 
+---
