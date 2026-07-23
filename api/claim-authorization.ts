@@ -1,7 +1,9 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { Redis } from "@upstash/redis";
+import { randomBytes } from "crypto";
 
 const ETH_ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
+const EVM_PRIVATE_KEY_RE = /^0x[a-fA-F0-9]{64}$/;
 const FARCASTER_CAST_HASH_RE = /^0x[a-fA-F0-9]{40}$/;
 
 const BASE_CHAIN_ID = 8453;
@@ -10,6 +12,8 @@ const BASE_SEPOLIA_CHAIN_ID = 84532;
 const SUPPORTED_CHAIN_IDS = new Set([BASE_CHAIN_ID, BASE_SEPOLIA_CHAIN_ID]);
 
 const SHARE_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
+
+const AUTHORIZATION_TTL_SECONDS = 10 * 60;
 
 const RATE_LIMIT_WINDOW_SECONDS = 10 * 60;
 const RATE_LIMIT_MAX_PER_FID = 5;
@@ -36,6 +40,7 @@ type ChainConfig = {
   chainName: "base" | "base-sepolia";
   contractAddress: string;
   signerAddress: string;
+  signerPrivateKey: `0x${string}`;
 };
 
 type AppConfig = {
@@ -125,6 +130,10 @@ function isValidEthAddress(value: unknown): value is string {
   return typeof value === "string" && ETH_ADDRESS_RE.test(value);
 }
 
+function isValidPrivateKey(value: unknown): value is `0x${string}` {
+  return typeof value === "string" && EVM_PRIVATE_KEY_RE.test(value);
+}
+
 function parsePositiveInteger(value: unknown): number | null {
   if (typeof value === "number" && Number.isInteger(value) && value > 0) {
     return value;
@@ -195,12 +204,23 @@ function readEnvAddress(name: string): string | null {
   return normalizeAddress(value);
 }
 
+function readEnvPrivateKey(name: string): `0x${string}` | null {
+  const value = process.env[name];
+
+  if (!isValidPrivateKey(value)) {
+    return null;
+  }
+
+  return value;
+}
+
 function getChainConfig(chainId: number): ChainConfig | null {
   if (chainId === BASE_CHAIN_ID) {
     const contractAddress = readEnvAddress("TYSM_V3_BASE_CONTRACT_ADDRESS");
     const signerAddress = readEnvAddress("TYSM_V3_BASE_SIGNER_ADDRESS");
+    const signerPrivateKey = readEnvPrivateKey("TYSM_V3_BASE_SIGNER_PRIVATE_KEY");
 
-    if (!contractAddress || !signerAddress) {
+    if (!contractAddress || !signerAddress || !signerPrivateKey) {
       return null;
     }
 
@@ -209,14 +229,18 @@ function getChainConfig(chainId: number): ChainConfig | null {
       chainName: "base",
       contractAddress,
       signerAddress,
+      signerPrivateKey,
     };
   }
 
   if (chainId === BASE_SEPOLIA_CHAIN_ID) {
     const contractAddress = readEnvAddress("TYSM_V3_SEPOLIA_CONTRACT_ADDRESS");
     const signerAddress = readEnvAddress("TYSM_V3_SEPOLIA_SIGNER_ADDRESS");
+    const signerPrivateKey = readEnvPrivateKey(
+      "TYSM_V3_SEPOLIA_SIGNER_PRIVATE_KEY"
+    );
 
-    if (!contractAddress || !signerAddress) {
+    if (!contractAddress || !signerAddress || !signerPrivateKey) {
       return null;
     }
 
@@ -225,6 +249,7 @@ function getChainConfig(chainId: number): ChainConfig | null {
       chainName: "base-sepolia",
       contractAddress,
       signerAddress,
+      signerPrivateKey,
     };
   }
 
@@ -266,6 +291,14 @@ function getAppConfig(chainId: number): AppConfig | null {
     neynarApiKey,
     redis,
   };
+}
+
+function generateNonce(): `0x${string}` {
+  return `0x${randomBytes(32).toString("hex")}`;
+}
+
+function generateDeadline(nowSeconds = Math.floor(Date.now() / 1000)): number {
+  return nowSeconds + AUTHORIZATION_TTL_SECONDS;
 }
 
 function validateRequestBody(body: ClaimAuthorizationRequestBody):
@@ -772,6 +805,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         hasNeynarApiKey: Boolean(process.env.NEYNAR_API_KEY),
         hasRedisUrl: Boolean(process.env.UPSTASH_REDIS_REST_URL),
         hasRedisToken: Boolean(process.env.UPSTASH_REDIS_REST_TOKEN),
+        hasBasePrivateKey: Boolean(process.env.TYSM_V3_BASE_SIGNER_PRIVATE_KEY),
+        hasSepoliaPrivateKey: Boolean(
+          process.env.TYSM_V3_SEPOLIA_SIGNER_PRIVATE_KEY
+        ),
       });
 
       return sendError(
@@ -896,34 +933,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       );
     }
 
-    /**
-     * Stage 4C intentionally stops here.
-     *
-     * Implemented:
-     * - request validation
-     * - supported chain validation
-     * - environment-based chain config validation
-     * - contract address validation
-     * - signer address validation
-     * - NEYNAR_API_KEY presence validation
-     * - Redis config validation
-     * - basic Redis rate limiting
-     * - Redis denylist checks
-     * - used cast hash check
-     * - wallet/FID association verification
-     * - Neynar cast lookup by castHash
-     * - cast author FID check
-     * - cast recency check
-     * - cast marker check
-     *
-     * Not implemented yet:
-     * - storing used cast hash
-     * - nonce/deadline generation
-     * - EIP-712 signing
-     *
-     * This endpoint must not sign anything until those checks are added.
-     */
-    console.info("[claim-authorization] validated request, denylist, rate, cast reuse, wallet, and share", {
+    const nonce = generateNonce();
+    const deadline = generateDeadline();
+
+    console.info("[claim-authorization] validated request and prepared unsigned authorization", {
       fid: validation.fid,
       wallet: validation.wallet,
       matchedAddress: walletVerification.matchedAddress,
@@ -934,7 +947,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       chainName: appConfig.chain.chainName,
       contractAddress: appConfig.chain.contractAddress,
       signerAddress: appConfig.chain.signerAddress,
-      stage: "denylist-rate-and-verification-only",
+      deadline,
+      noncePreview: `${nonce.slice(0, 10)}...${nonce.slice(-6)}`,
+      stage: "nonce-deadline-no-signing",
     });
 
     return sendError(
