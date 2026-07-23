@@ -9,6 +9,9 @@
     "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"
   },
   "private": true,
+  "dependencies": {
+    "viem": "^2.21.12"
+  },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "@upstash/redis": "^1.34.9",
