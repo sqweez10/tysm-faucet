@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { Redis } from "@upstash/redis";
 
 const ETH_ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
 const FARCASTER_CAST_HASH_RE = /^0x[a-fA-F0-9]{40}$/;
@@ -35,6 +36,7 @@ type ChainConfig = {
 type AppConfig = {
   chain: ChainConfig;
   neynarApiKey: string;
+  redis: Redis;
 };
 
 type NeynarCastAuthor = {
@@ -224,6 +226,20 @@ function getChainConfig(chainId: number): ChainConfig | null {
   return null;
 }
 
+function getRedis(): Redis | null {
+  const url = readRequiredEnv("UPSTASH_REDIS_REST_URL");
+  const token = readRequiredEnv("UPSTASH_REDIS_REST_TOKEN");
+
+  if (!url || !token) {
+    return null;
+  }
+
+  return new Redis({
+    url,
+    token,
+  });
+}
+
 function getAppConfig(chainId: number): AppConfig | null {
   const chain = getChainConfig(chainId);
   if (!chain) {
@@ -235,9 +251,15 @@ function getAppConfig(chainId: number): AppConfig | null {
     return null;
   }
 
+  const redis = getRedis();
+  if (!redis) {
+    return null;
+  }
+
   return {
     chain,
     neynarApiKey,
+    redis,
   };
 }
 
@@ -562,6 +584,15 @@ async function verifyWalletFidAssociation(params: {
   };
 }
 
+function usedCastKey(castHash: string) {
+  return `tysm:v3:used_cast:${castHash.toLowerCase()}`;
+}
+
+async function isCastAlreadyUsed(redis: Redis, castHash: string): Promise<boolean> {
+  const existing = await redis.get(usedCastKey(castHash));
+  return existing !== null;
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   setCorsHeaders(res);
 
@@ -592,6 +623,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       console.error("[claim-authorization] missing or invalid app config", {
         chainId: validation.chainId,
         hasNeynarApiKey: Boolean(process.env.NEYNAR_API_KEY),
+        hasRedisUrl: Boolean(process.env.UPSTASH_REDIS_REST_URL),
+        hasRedisToken: Boolean(process.env.UPSTASH_REDIS_REST_TOKEN),
       });
 
       return sendError(
@@ -599,6 +632,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         503,
         "signing_unavailable",
         "The claim service is temporarily unavailable. Please try again shortly."
+      );
+    }
+
+    const castAlreadyUsed = await isCastAlreadyUsed(
+      appConfig.redis,
+      validation.castHash
+    );
+
+    if (castAlreadyUsed) {
+      console.info("[claim-authorization] used cast rejected", {
+        fid: validation.fid,
+        wallet: validation.wallet,
+        castHash: validation.castHash,
+        chainId: appConfig.chain.chainId,
+      });
+
+      return sendError(
+        res,
+        400,
+        "share_already_used",
+        "This share has already been used for a claim."
       );
     }
 
@@ -648,7 +702,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     /**
-     * Stage 3C intentionally stops here.
+     * Stage 4A intentionally stops here.
      *
      * Implemented:
      * - request validation
@@ -657,6 +711,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
      * - contract address validation
      * - signer address validation
      * - NEYNAR_API_KEY presence validation
+     * - Redis config validation
+     * - used cast hash check
      * - wallet/FID association verification
      * - Neynar cast lookup by castHash
      * - cast author FID check
@@ -664,7 +720,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
      * - cast marker check
      *
      * Not implemented yet:
-     * - used cast hash storage
+     * - storing used cast hash
      * - rate limiting
      * - denylist checks
      * - nonce/deadline generation
@@ -672,7 +728,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
      *
      * This endpoint must not sign anything until those checks are added.
      */
-    console.info("[claim-authorization] validated request, wallet, and share", {
+    console.info("[claim-authorization] validated request, cast reuse, wallet, and share", {
       fid: validation.fid,
       wallet: validation.wallet,
       matchedAddress: walletVerification.matchedAddress,
@@ -683,7 +739,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       chainName: appConfig.chain.chainName,
       contractAddress: appConfig.chain.contractAddress,
       signerAddress: appConfig.chain.signerAddress,
-      stage: "wallet-and-share-verification-only",
+      stage: "redis-used-cast-check-only",
     });
 
     return sendError(
