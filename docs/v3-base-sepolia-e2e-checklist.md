@@ -35,7 +35,8 @@ This document outlines the step-by-step verification process for testing **TYSM 
 
 Set these variables in your local `.env.test` file and Vercel Project Settings (Base Sepolia environment). **Never use real production private keys or secrets here.**
 
-```bash
+```
+
 # Base Sepolia Contract Configuration
 TYSM_V3_SEPOLIA_CONTRACT_ADDRESS=0x0000000000000000000000000000000000000000
 TYSM_V3_SEPOLIA_SIGNER_ADDRESS=0x1111111111111111111111111111111111111111
